@@ -1,0 +1,16 @@
+[package]
+name = "utf8char"
+version = "0.1.0"
+edition = "2021"
+
+[[bench]]
+harness = false
+name = "default"
+
+[dev-dependencies]
+criterion = "0.5"
+
+[dependencies]
+
+[profile.dev]
+opt-level = 1
