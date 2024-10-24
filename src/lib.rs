@@ -1,6 +1,6 @@
 #![no_std]
+#![warn(clippy::pedantic)]
 // TODO(ultrabear): enable
-//#![warn(clippy::pedantic)]
 //#![warn(missing_docs, clippy::missing_docs_in_private_items)]
 
 use core::{
@@ -42,11 +42,14 @@ impl Utf8Char {
     /// encoding (returns 1..=4).
     ///
     /// `byte` must be the first byte of a valid UTF-8 encoded codepoint.
+    #[must_use]
     const fn codepoint_len(byte: u8) -> u8 {
         (byte.leading_ones().saturating_sub(1) + 1) as u8
     }
 
-    pub const fn byte_len(&self) -> u8 {
+    /// Returns the amount of bytes this codepoint takes up when encoded as utf8
+    #[must_use]
+    pub const fn len_utf8(&self) -> u8 {
         let len = Self::codepoint_len(self.0[0]);
 
         // SAFETY: codepoint_len will always return 1..=4 for valid utf8, which Utf8Char is
@@ -61,6 +64,7 @@ impl Utf8Char {
     ///
     /// This can be more performant than calling from_char, as no complex utf8 conversion will be
     /// performed
+    #[must_use]
     pub const fn from_first_char(s: &str) -> Option<Self> {
         // this method is provably correct for all unicode characters: it is tested below
         // writing it this way forces us to branch if the condition is not met
@@ -74,8 +78,9 @@ impl Utf8Char {
 
     /// returns a Utf8Char from the first char of a passed non empty string.
     ///
-    /// # Safety:
+    /// # Safety
     /// This function must be called with a string that has a length greater than or equal to one.
+    #[must_use]
     pub const unsafe fn from_first_char_unchecked(s: &str) -> Self {
         // SAFETY: the caller must always pass a nonempty string as a safety invariant
         unsafe { assume(s.len() >= 1) };
@@ -104,6 +109,7 @@ impl Utf8Char {
     }
 
     /// Creates a `Utf8Char` from a `char`
+    #[must_use]
     pub const fn from_char(code: char) -> Self {
         // this method is provably correct for all unicode characters: it is tested below
         // this entire function is a const modified copy of the implementation of char::encode_utf8 in
@@ -124,7 +130,16 @@ impl Utf8Char {
         let code = code as u32;
 
         match len {
-            1 => out[0] = code as u8,
+            1 => {
+                out[0] = {
+                    #[expect(
+                        clippy::cast_possible_truncation,
+                        reason = "len_utf8 said this is a 1 byte ascii subset, so it fits in u8"
+                    )]
+                    let code = code as u8;
+                    code
+                }
+            }
             2 => {
                 out[0] = (code >> 6 & 0x1F) as u8 | TAG_TWO;
                 out[1] = (code & 0x3F) as u8 | TAG_CONTINUATION;
@@ -149,6 +164,7 @@ impl Utf8Char {
     }
 
     /// Converts a `Utf8Char` to a `char`
+    #[must_use]
     pub const fn to_char(&self) -> char {
         // this method is provably correct for all unicode characters: it is tested below
         // this entire function is copied off of the implementation of str::chars() because it is
@@ -201,8 +217,9 @@ impl Utf8Char {
     }
 
     /// Returns a string reference to the codepoint
+    #[must_use]
     pub const fn as_str(&self) -> &str {
-        let len = self.byte_len() as usize;
+        let len = self.len_utf8() as usize;
 
         // SAFETY: byte_len will always return in the range 1..=4
         let slice = unsafe { self.0.split_at_unchecked(len).0 };
@@ -218,7 +235,7 @@ impl Utf8Char {
     /// guarantee of `Utf8Char`; The first codepoint in the string will be interpreted as the only
     /// codepoint in the `Utf8Char`, and the length will change to match.
     pub fn as_mut_str(&mut self) -> &mut str {
-        let len = self.byte_len() as usize;
+        let len = self.len_utf8() as usize;
 
         // SAFETY: byte_len will always return in the range 1..=4
         let slice = unsafe { self.0.split_at_mut_unchecked(len).0 };
@@ -326,9 +343,9 @@ impl fmt::Display for Utf8Char {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // copied from char's Display implementation, sans utf8 encoding
         if f.width().is_none() && f.precision().is_none() {
-            f.write_str(&**self)
+            f.write_str(self.as_str())
         } else {
-            f.pad(&**self)
+            f.pad(self.as_str())
         }
     }
 }
@@ -352,7 +369,7 @@ fn roundtrip() {
         assert!(matches!(codelen, 1..=4));
 
         assert_eq!(codelen as usize, ch.len_utf8());
-        assert_eq!(utf8.byte_len() as usize, ch.len_utf8());
+        assert_eq!(utf8.len_utf8() as usize, ch.len_utf8());
 
         assert_eq!(s, &*utf8);
         assert_eq!(&*utf8_alt, s);
