@@ -1,26 +1,34 @@
 #![no_std]
-// TODO enable
+// TODO(ultrabear): enable
 //#![warn(clippy::pedantic)]
 //#![warn(missing_docs, clippy::missing_docs_in_private_items)]
 
 use core::{
-    fmt, hint,
-    marker::PhantomData,
-    mem,
+    char, fmt, hint,
     ops::{Deref, DerefMut},
-    ptr::NonNull,
 };
 
 /// Unsafely assumes that the boolean passed in is true
 ///
-/// Safety:
-/// It is UB to pass false to this function
+/// # Safety:
+/// This function may only be called with the value of true
 const unsafe fn assume(b: bool) {
     if !b {
         unsafe { hint::unreachable_unchecked() }
     }
 }
 
+/// A single unicode codepoint encoded in utf8.
+///
+/// This type is like a contemporary `char`:
+/// - Debug/Display is has identical output
+/// - Represents a single unicode codepoint
+/// - Has a size of 4 bytes
+/// - Is Copy
+///
+/// However, being encoded as utf8, you can take a `&str` reference to it, or a `&mut str` reference to
+/// it, it is also `Borrow<str>`, and `PartialOrd<str>`.
+/// Encoding between a char and utf8 is expensive and branched,
 #[derive(Copy, Clone)]
 pub struct Utf8Char([u8; 4]);
 
@@ -46,25 +54,40 @@ impl Utf8Char {
     /// returns a Utf8Char from the first char of a passed str. Returns None if the string
     /// contained no characters (was empty)
     ///
-    /// This can be more performant than calling from_char, as no utf32 -> utf8 conversion need be
+    /// This can be more performant than calling from_char, as no complex utf8 conversion will be
     /// performed
     pub const fn from_first_char(s: &str) -> Option<Self> {
         // this method is provably correct for all unicode characters: it is tested below
-        if s.is_empty() {
+        // writing it this way forces us to branch if the condition is not met
+        let false = s.is_empty() else {
             return None;
-        }
+        };
+
+        // SAFETY: We have just checked the string is not empty, and returned otherwise
+        Some(unsafe { Self::from_first_char_unchecked(s) })
+    }
+
+    /// returns a Utf8Char from the first char of a passed non empty string.
+    ///
+    /// # Safety:
+    /// This function must be called with a string that has a length greater than or equal to one.
+    pub const unsafe fn from_first_char_unchecked(s: &str) -> Self {
+        // SAFETY: the caller must always pass a nonempty string as a safety invariant
+        unsafe { assume(s.len() >= 1) };
 
         let b = s.as_bytes();
 
         let len = Self::codepoint_len(b[0]);
 
-        // SAFETY: codepoint len always returns 1..=4 so len must be less than or equal to 4
-        // string length must be greater than or equal to codepoint_len if it is encoded as valid
+        // SAFETY: codepoint len always returns 1..=4 on valid utf8 so len must be in that range
+        unsafe { assume(1 <= len && len <= 4) };
+
+        // SAFETY: string length must be greater than or equal to codepoint_len if it is encoded as valid
         // utf8 (a safety invariant of str)
-        unsafe { assume(s.len() >= len as usize && len <= 4) };
+        unsafe { assume(s.len() >= len as usize) };
 
         // panic safety: we assume &str is valid utf8
-        Some(match len {
+        match len {
             // NOTE: We are a safety invariant, the [u8; 4] in Utf8Char must be valid utf8
             // 0xff is used for padding as it is invalid utf8
             1 => Self([b[0], 0xff, 0xff, 0xff]),
@@ -72,17 +95,18 @@ impl Utf8Char {
             3 => Self([b[0], b[1], b[2], 0xff]),
             4 => Self([b[0], b[1], b[2], b[3]]),
             _ => panic!("unreachable: utf8 codepoints must be of length 1..=4"),
-        })
+        }
     }
 
     pub const fn from_char(code: char) -> Self {
         // this method is provably correct for all unicode characters: it is tested below
         // this entire function is a const modified copy of the implementation of char::encode_utf8 in
         // core/char/methods.rs
-        // TODO(ultrabear): replace with encode_utf8 when const mut refs are stable (and
+        // FIXME(ultrabear): replace with encode_utf8 when const mut refs are stable (and
         // encode_utf8 is const stable)
+        // FIXME(1.83): const_mut_refs and encode_utf8 const stable as of 1.83
 
-        const TAG_CONT: u8 = 0b1000_0000;
+        const TAG_CONTINUATION: u8 = 0b1000_0000;
         const TAG_TWO: u8 = 0b1100_0000;
         const TAG_THREE: u8 = 0b1110_0000;
         const TAG_FOUR: u8 = 0b1111_0000;
@@ -97,18 +121,18 @@ impl Utf8Char {
             1 => out[0] = code as u8,
             2 => {
                 out[0] = (code >> 6 & 0x1F) as u8 | TAG_TWO;
-                out[1] = (code & 0x3F) as u8 | TAG_CONT;
+                out[1] = (code & 0x3F) as u8 | TAG_CONTINUATION;
             }
             3 => {
                 out[0] = (code >> 12 & 0x0F) as u8 | TAG_THREE;
-                out[1] = (code >> 6 & 0x3F) as u8 | TAG_CONT;
-                out[2] = (code & 0x3F) as u8 | TAG_CONT;
+                out[1] = (code >> 6 & 0x3F) as u8 | TAG_CONTINUATION;
+                out[2] = (code & 0x3F) as u8 | TAG_CONTINUATION;
             }
             4 => {
                 out[0] = (code >> 18 & 0x07) as u8 | TAG_FOUR;
-                out[1] = (code >> 12 & 0x3F) as u8 | TAG_CONT;
-                out[2] = (code >> 6 & 0x3F) as u8 | TAG_CONT;
-                out[3] = (code & 0x3F) as u8 | TAG_CONT;
+                out[1] = (code >> 12 & 0x3F) as u8 | TAG_CONTINUATION;
+                out[2] = (code >> 6 & 0x3F) as u8 | TAG_CONTINUATION;
+                out[3] = (code & 0x3F) as u8 | TAG_CONTINUATION;
             }
             _ => panic!("unreachable: len_utf8 must always return 1..=4"),
         }
@@ -124,7 +148,7 @@ impl Utf8Char {
         // highly performant
         // the only relevant modifications are ones such that it may be fully used in a const
         // context
-        // TODO(ultrabear): replace this entire thing with chars().next().unwrap_unchecked() when
+        // FIXME(ultrabear): replace this entire thing with chars().next().unwrap_unchecked() when
         // that is const stable
 
         // the below is mostly copied from core/src/str/validations.rs
@@ -166,23 +190,31 @@ impl Utf8Char {
         debug_assert!(char::from_u32(ch).is_some());
 
         // SAFETY: Utf8Char must always be valid utf8 so this must always be valid
-        unsafe { mem::transmute(ch) }
+        unsafe { char::from_u32_unchecked(ch) }
     }
 
-    pub fn as_str(&self) -> &str {
+    /// Returns a string reference to the codepoint
+    pub const fn as_str(&self) -> &str {
         let len = self.byte_len() as usize;
 
-        let slice = &self.0[..len];
+        // SAFETY: byte_len will always return in the range 1..=4
+        let slice = unsafe { self.0.split_at_unchecked(len).0 };
 
         // SAFETY: [u8; byte_len] of Utf8Char must be valid Utf8
         unsafe { core::str::from_utf8_unchecked(slice) }
     }
 
-    // TODO document multi char behavior
+    /// Returns mutable string reference to codepoint
+    ///
+    /// Mutations through this method that cause the string to consist of multiple codepoints, i/e
+    /// a single 4 byte codepoint being mutated into 4 individual 1 byte codepoints, will not change the
+    /// guarantee of `Utf8Char`; The first codepoint in the string will be interpreted as the only
+    /// codepoint in the `Utf8Char`, and the length will change to match.
     pub fn as_mut_str(&mut self) -> &mut str {
         let len = self.byte_len() as usize;
 
-        let slice = &mut self.0[..len];
+        // SAFETY: byte_len will always return in the range 1..=4
+        let slice = unsafe { self.0.split_at_mut_unchecked(len).0 };
 
         // SAFETY: [u8; byte_len] of Utf8Char must be valid utf8
         unsafe { core::str::from_utf8_unchecked_mut(slice) }
@@ -220,45 +252,12 @@ impl fmt::Display for Utf8Char {
     }
 }
 
-struct Utf8CharRef<'a>(NonNull<u8>, PhantomData<&'a str>);
-
-impl<'a> Utf8CharRef<'a> {}
-
-#[test]
-#[cfg(miri)]
-fn greater_than_stacked() {
-
-    // this is a test that we using a provenance memory model that supports our types
-    // if this test fails, this crate is UB
-
-    #[repr(transparent)]
-    struct Cursed([u8; 1]);
-
-    impl Cursed {
-        fn as_ptr(&self) -> *const u8 {
-            self as *const Cursed as *const u8
-        }
-    }
-
-    let one: &'static str = "abcd";
-
-    let oneref: &'static Cursed = unsafe { &*(one.as_ptr() as *const Cursed) };
-
-    // never deref oneref
-
-    assert_eq!(unsafe { *oneref.as_ptr().add(1) }, b'b');
-}
+#[cfg(test)]
+extern crate alloc;
 
 #[test]
 fn roundtrip() {
-    let mut ctr = 5000;
-
     for ch in '\0'..=char::MAX {
-        ctr -= 1;
-        if ctr == 0 {
-            return;
-        }
-
         let mut buf = [0xff; 4];
 
         let s = ch.encode_utf8(&mut buf);
@@ -280,5 +279,38 @@ fn roundtrip() {
 
         assert_eq!(utf8.to_char(), ch);
         assert_eq!(utf8_alt.to_char(), ch);
+    }
+}
+
+#[test]
+fn displays() {
+    use alloc::string::String;
+    use core::{fmt::Write, write};
+
+    let mut bufutf32 = String::with_capacity(32);
+    let mut bufutf8 = String::with_capacity(32);
+
+    for utf32 in '\0'..=char::MAX {
+        let mut utf8 = Utf8Char::from_char(utf32);
+
+        // Display
+        bufutf8.clear();
+        bufutf32.clear();
+
+        write!(bufutf8, "{utf8}").unwrap();
+        write!(bufutf32, "{utf32}").unwrap();
+
+        assert_eq!(bufutf8, bufutf32);
+        assert_eq!(bufutf8, utf8.as_str());
+        assert_eq!(bufutf8, &*utf8.as_mut_str());
+
+        // Debug
+        bufutf8.clear();
+        bufutf32.clear();
+
+        write!(bufutf8, "{utf8:?}").unwrap();
+        write!(bufutf32, "{utf32:?}").unwrap();
+
+        assert_eq!(bufutf8, bufutf32);
     }
 }
