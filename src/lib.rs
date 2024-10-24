@@ -4,7 +4,12 @@
 //#![warn(missing_docs, clippy::missing_docs_in_private_items)]
 
 use core::{
-    char, fmt, hint,
+    borrow::Borrow,
+    char,
+    cmp::Ordering,
+    fmt,
+    hash::{Hash, Hasher},
+    hint,
     ops::{Deref, DerefMut},
 };
 
@@ -98,6 +103,7 @@ impl Utf8Char {
         }
     }
 
+    /// Creates a `Utf8Char` from a `char`
     pub const fn from_char(code: char) -> Self {
         // this method is provably correct for all unicode characters: it is tested below
         // this entire function is a const modified copy of the implementation of char::encode_utf8 in
@@ -142,6 +148,7 @@ impl Utf8Char {
         Self(out)
     }
 
+    /// Converts a `Utf8Char` to a `char`
     pub const fn to_char(&self) -> char {
         // this method is provably correct for all unicode characters: it is tested below
         // this entire function is copied off of the implementation of str::chars() because it is
@@ -220,6 +227,80 @@ impl Utf8Char {
         unsafe { core::str::from_utf8_unchecked_mut(slice) }
     }
 }
+
+impl From<char> for Utf8Char {
+    fn from(value: char) -> Self {
+        Self::from_char(value)
+    }
+}
+
+impl From<Utf8Char> for char {
+    fn from(value: Utf8Char) -> Self {
+        value.to_char()
+    }
+}
+
+impl AsRef<str> for Utf8Char {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl Borrow<str> for Utf8Char {
+    fn borrow(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl PartialEq<str> for Utf8Char {
+    fn eq(&self, other: &str) -> bool {
+        self.as_str().eq(other)
+    }
+}
+
+impl PartialEq<Utf8Char> for str {
+    fn eq(&self, other: &Utf8Char) -> bool {
+        self.eq(other.as_str())
+    }
+}
+
+impl PartialOrd<str> for Utf8Char {
+    fn partial_cmp(&self, other: &str) -> Option<Ordering> {
+        Some(self.as_str().cmp(other))
+    }
+}
+
+impl PartialOrd<Utf8Char> for str {
+    fn partial_cmp(&self, other: &Utf8Char) -> Option<Ordering> {
+        Some(self.cmp(other.as_str()))
+    }
+}
+
+impl Hash for Utf8Char {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.as_str().hash(state);
+    }
+}
+
+impl Ord for Utf8Char {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.as_str().cmp(other.as_str())
+    }
+}
+
+impl PartialOrd for Utf8Char {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.as_str().cmp(other.as_str()))
+    }
+}
+
+impl PartialEq for Utf8Char {
+    fn eq(&self, other: &Self) -> bool {
+        self.as_str().eq(other.as_str())
+    }
+}
+
+impl Eq for Utf8Char {}
 
 impl Deref for Utf8Char {
     type Target = str;
