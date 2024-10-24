@@ -13,7 +13,15 @@ pub fn bench(c: &mut Criterion) {
     });
 
     c.bench_function("utf8char::as_char", |c| {
-        c.iter(|| bb(bb(utf8char).as_char()))
+        c.iter(|| bb(bb(utf8char).to_char()))
+    });
+
+    c.bench_function("utf8char::from_char", |c| {
+        c.iter(|| bb(Utf8Char::from_char(bb(rch))))
+    });
+
+    c.bench_function("encode_unicode::Utf8Char::new", |c| {
+        c.iter(|| bb(encode_unicode::Utf8Char::new(bb(rch))))
     });
 }
 
