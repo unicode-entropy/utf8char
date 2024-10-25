@@ -10,6 +10,7 @@ name = "default"
 [dev-dependencies]
 criterion = "0.5"
 encode_unicode = "1.0.0"
+rayon = "1.10.0"
 
 [dependencies]
 

@@ -1,7 +1,8 @@
+//! A UTF-8 encoded codepoint.
+
 #![no_std]
 #![warn(clippy::pedantic)]
-// TODO(ultrabear): enable
-//#![warn(missing_docs, clippy::missing_docs_in_private_items)]
+#![warn(missing_docs, clippy::missing_docs_in_private_items)]
 
 use core::{
     borrow::Borrow,
@@ -32,8 +33,12 @@ const unsafe fn assume(b: bool) {
 /// - Is Copy
 ///
 /// However, being encoded as utf8, you can take a `&str` reference to it, or a `&mut str` reference to
-/// it, it is also `Borrow<str>`, and `PartialOrd<str>`.
-/// Encoding between a char and utf8 is expensive and branched,
+/// it, it is also `Borrow<str>` and `PartialOrd<str>`, and Hashes like &str.
+///
+/// Encoding between a char and utf8 is expensive and branched, and clunky when you have a method
+/// expecting a &str. Instead storing your data as a `&str` now takes up 16 additional bytes even when its not
+/// needed. `Utf8Char` exists to fill this gap; "I have one codepoint but I want to use it with
+/// `&str` APIs taking"
 #[derive(Copy, Clone)]
 pub struct Utf8Char([u8; 4]);
 
@@ -44,7 +49,12 @@ impl Utf8Char {
     /// `byte` must be the first byte of a valid UTF-8 encoded codepoint.
     #[must_use]
     const fn codepoint_len(byte: u8) -> u8 {
-        (byte.leading_ones().saturating_sub(1) + 1) as u8
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "leading_ones returns a u32 for some reason, this will only return 1..=4 on valid utf8"
+        )]
+        let len = (byte.leading_ones().saturating_sub(1) + 1) as u8;
+        len
     }
 
     /// Returns the amount of bytes this codepoint takes up when encoded as utf8
@@ -59,10 +69,10 @@ impl Utf8Char {
         len
     }
 
-    /// returns a Utf8Char from the first char of a passed str. Returns None if the string
+    /// returns a `Utf8Char` from the first char of a passed `&str`. Returns None if the string
     /// contained no characters (was empty)
     ///
-    /// This can be more performant than calling from_char, as no complex utf8 conversion will be
+    /// This can be more performant than calling [`from_char`][Utf8Char::from_char], as no complex utf8 conversion will be
     /// performed
     #[must_use]
     pub const fn from_first_char(s: &str) -> Option<Self> {
@@ -76,17 +86,19 @@ impl Utf8Char {
         Some(unsafe { Self::from_first_char_unchecked(s) })
     }
 
-    /// returns a Utf8Char from the first char of a passed non empty string.
+    /// returns a `Utf8Char` from the first char of a passed non empty string.
     ///
     /// # Safety
     /// This function must be called with a string that has a length greater than or equal to one.
     #[must_use]
     pub const unsafe fn from_first_char_unchecked(s: &str) -> Self {
         // SAFETY: the caller must always pass a nonempty string as a safety invariant
-        unsafe { assume(s.len() >= 1) };
+        unsafe { assume(!s.is_empty()) };
 
         let b = s.as_bytes();
 
+        // expect this to not generate panic code thanks to our assume
+        // cant use get_unchecked because it is not const
         let len = Self::codepoint_len(b[0]);
 
         // SAFETY: codepoint len always returns 1..=4 on valid utf8 so len must be in that range
@@ -118,9 +130,13 @@ impl Utf8Char {
         // encode_utf8 is const stable)
         // FIXME(1.83): const_mut_refs and encode_utf8 const stable as of 1.83
 
+        /// Continuation byte tag
         const TAG_CONTINUATION: u8 = 0b1000_0000;
+        /// Tag to represent 2 byte codepoint
         const TAG_TWO: u8 = 0b1100_0000;
+        /// Tag to represent 3 byte codepoint
         const TAG_THREE: u8 = 0b1110_0000;
+        /// Tag to represent 4 byte codepoint
         const TAG_FOUR: u8 = 0b1111_0000;
 
         let mut out = [0xff; 4];
@@ -175,12 +191,15 @@ impl Utf8Char {
         // that is const stable
 
         // the below is mostly copied from core/src/str/validations.rs
+        /// mask of continuation bytes data portion
         const B6: u8 = 0b0011_1111;
 
+        /// reads first byte of utf8 data
         const fn utf8_first_byte(byte: u8, width: u32) -> u32 {
             (byte & (0x7F >> width)) as u32
         }
 
+        /// adds a continuation byte to the char
         const fn utf8_acc_cont_byte(ch: u32, byte: u8) -> u32 {
             (ch << 6) | (byte & B6) as u32
         }
@@ -355,7 +374,9 @@ extern crate alloc;
 
 #[test]
 fn roundtrip() {
-    for ch in '\0'..=char::MAX {
+    use rayon::iter::{IntoParallelIterator, ParallelIterator};
+
+    ('\0'..=char::MAX).into_par_iter().for_each(|ch| {
         let mut buf = [0xff; 4];
 
         let s = ch.encode_utf8(&mut buf);
@@ -377,7 +398,12 @@ fn roundtrip() {
 
         assert_eq!(utf8.to_char(), ch);
         assert_eq!(utf8_alt.to_char(), ch);
-    }
+    })
+}
+
+#[test]
+fn empty_string() {
+    assert!(Utf8Char::from_first_char("").is_none());
 }
 
 #[test]
@@ -385,30 +411,38 @@ fn displays() {
     use alloc::string::String;
     use core::{fmt::Write, write};
 
-    let mut bufutf32 = String::with_capacity(32);
-    let mut bufutf8 = String::with_capacity(32);
+    use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
-    for utf32 in '\0'..=char::MAX {
-        let mut utf8 = Utf8Char::from_char(utf32);
+    ('\0'..=char::MAX).into_par_iter().for_each_with(
+        (String::new(), String::new()),
+        |(bufutf8, bufutf32), utf32| {
+            let mut utf8 = Utf8Char::from_char(utf32);
 
-        // Display
-        bufutf8.clear();
-        bufutf32.clear();
+            // Display
+            bufutf8.clear();
+            bufutf32.clear();
 
-        write!(bufutf8, "{utf8}").unwrap();
-        write!(bufutf32, "{utf32}").unwrap();
+            write!(bufutf8, "{utf8}").unwrap();
+            write!(bufutf32, "{utf32}").unwrap();
 
-        assert_eq!(bufutf8, bufutf32);
-        assert_eq!(bufutf8, utf8.as_str());
-        assert_eq!(bufutf8, &*utf8.as_mut_str());
+            assert_eq!(bufutf8, bufutf32);
+            assert_eq!(bufutf8, utf8.as_str());
+            assert_eq!(bufutf8, &*utf8.as_mut_str());
 
-        // Debug
-        bufutf8.clear();
-        bufutf32.clear();
+            assert_eq!(Utf8Char::from_first_char(&bufutf8), Some(utf8));
+            assert_eq!(
+                unsafe { Utf8Char::from_first_char_unchecked(&bufutf8) },
+                utf8
+            );
 
-        write!(bufutf8, "{utf8:?}").unwrap();
-        write!(bufutf32, "{utf32:?}").unwrap();
+            // Debug
+            bufutf8.clear();
+            bufutf32.clear();
 
-        assert_eq!(bufutf8, bufutf32);
-    }
+            write!(bufutf8, "{utf8:?}").unwrap();
+            write!(bufutf32, "{utf32:?}").unwrap();
+
+            assert_eq!(bufutf8, bufutf32);
+        },
+    );
 }
