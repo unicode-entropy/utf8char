@@ -19,18 +19,27 @@ mod std_at_home;
 /// A single unicode codepoint encoded in utf8.
 ///
 /// This type is like a contemporary `char`:
-/// - Debug/Display is has identical output
+/// - Debug/Display has identical output
 /// - Represents a single unicode codepoint
 /// - Has a size of 4 bytes
 /// - Is Copy
 ///
-/// However, being encoded as utf8, you can take a `&str` reference to it, or a `&mut str` reference to
-/// it, it is also `Borrow<str>` and `PartialOrd<str>`, and Hashes like &str.
-///
+/// However, being encoded as utf8;
+/// - you can take a `&str` reference to it
+/// - you can take a `&mut str` reference to it
+/// - it is `Borrow<str>` and `PartialOrd<str>`
+/// - it Hashes like `&str`
+/// - it Ord's like `&str`
+/// 
 /// Encoding between a char and utf8 is expensive and branched, and clunky when you have a method
-/// expecting a &str. Instead storing your data as a `&str` now takes up 16 additional bytes even when its not
-/// needed. `Utf8Char` exists to fill this gap; "I have one codepoint but I want to use it with
-/// `&str` APIs taking"
+/// expecting a `&str`. Storing your data as a `&str` instead takes up 16 additional bytes even when 
+/// its not needed in a `&str` representation. `Utf8Char` exists to fill this gap; "I have one codepoint 
+/// but I want to use it with `&str` taking APIs". It is as compact as and holds the same guarantees as a 
+/// `char`, but has the convenience and performance of a `&str`.
+///
+/// Not all char methods are provided, for most this is because their implementation 
+/// would look like `self.to_char().method()`, causing an unexpected net negative in 
+/// performance
 #[derive(Copy, Clone)]
 pub struct Utf8Char([u8; 4]);
 
