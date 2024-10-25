@@ -1,10 +1,7 @@
 //! Things copied from the standard library
 //! Ideally this file becomes empty
 
-use core::hint;
-
 use super::Utf8Char;
-
 
 /// Const modified copy of `char::encode_utf8`
 /// see inner comments for specific files and details
