@@ -15,14 +15,13 @@
 
 use core::{
     borrow::Borrow,
-    char,
     cmp::Ordering,
-    fmt,
     hash::{Hash, Hasher},
     hint::assert_unchecked as assume,
-    ops::{Deref, DerefMut},
+    ops::Deref,
 };
 
+mod charapi;
 mod std_at_home;
 
 /// A single unicode codepoint encoded in utf8.
@@ -148,22 +147,6 @@ impl Utf8Char {
         // SAFETY: [u8; byte_len] of Utf8Char must be valid Utf8
         unsafe { core::str::from_utf8_unchecked(slice) }
     }
-
-    /// Returns mutable string reference to codepoint
-    ///
-    /// Mutations through this method that cause the string to consist of multiple codepoints, i/e
-    /// a single 4 byte codepoint being mutated into 4 individual 1 byte codepoints, will not change the
-    /// guarantee of `Utf8Char`; The first codepoint in the string will be interpreted as the only
-    /// codepoint in the `Utf8Char`, and the length will change to match.
-    pub fn as_mut_str(&mut self) -> &mut str {
-        let len = self.len_utf8() as usize;
-
-        // SAFETY: byte_len will always return in the range 1..=4
-        let slice = unsafe { self.0.split_at_mut_unchecked(len).0 };
-
-        // SAFETY: [u8; byte_len] of Utf8Char must be valid utf8
-        unsafe { core::str::from_utf8_unchecked_mut(slice) }
-    }
 }
 
 impl From<char> for Utf8Char {
@@ -248,29 +231,6 @@ impl Deref for Utf8Char {
     }
 }
 
-impl DerefMut for Utf8Char {
-    fn deref_mut(&mut self) -> &mut str {
-        self.as_mut_str()
-    }
-}
-
-impl fmt::Debug for Utf8Char {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Debug::fmt(&self.to_char(), f)
-    }
-}
-
-impl fmt::Display for Utf8Char {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // copied from char's Display implementation, sans utf8 encoding
-        if f.width().is_none() && f.precision().is_none() {
-            f.write_str(self.as_str())
-        } else {
-            f.pad(self.as_str())
-        }
-    }
-}
-
 #[cfg(test)]
 extern crate alloc;
 
@@ -318,7 +278,7 @@ fn displays() {
     ('\0'..=char::MAX).into_par_iter().for_each_with(
         (String::new(), String::new()),
         |(bufutf8, bufutf32), utf32| {
-            let mut utf8 = Utf8Char::from_char(utf32);
+            let utf8 = Utf8Char::from_char(utf32);
 
             // Display
             bufutf8.clear();
@@ -329,7 +289,6 @@ fn displays() {
 
             assert_eq!(bufutf8, bufutf32);
             assert_eq!(bufutf8, utf8.as_str());
-            assert_eq!(bufutf8, &*utf8.as_mut_str());
 
             assert_eq!(Utf8Char::from_first_char(&bufutf8), Some(utf8));
             assert_eq!(
