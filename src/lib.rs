@@ -1,4 +1,13 @@
-//! A UTF-8 encoded codepoint.
+//! A UTF-8 encoded [`prim@char`].
+//!
+//! This alternate representation of a `char` allows for certain benefits:
+//! - Deref to `&str`
+//! - Hash/Eq/Ord like `&str`
+//! - Smaller than `&'static str` for single codepoint cases (full const support included)
+//! - Some `char` methods are implementable without the performance loss of `&str` -> `char` -> `&str` (for
+//!   instance in a `str::chars()` loop)
+//!
+//! To get started, create a [`Utf8Char`].
 
 #![no_std]
 #![warn(clippy::pedantic)]
@@ -18,7 +27,7 @@ mod std_at_home;
 
 /// A single unicode codepoint encoded in utf8.
 ///
-/// This type is like a contemporary `char`:
+/// This type is like a contemporary [`prim@char`]:
 /// - Debug/Display has identical output
 /// - Represents a single unicode codepoint
 /// - Has a size of 4 bytes
@@ -30,15 +39,15 @@ mod std_at_home;
 /// - it is `Borrow<str>` and `PartialOrd<str>`
 /// - it Hashes like `&str`
 /// - it Ord's like `&str`
-/// 
-/// Encoding between a char and utf8 is expensive and branched, and clunky when you have a method
-/// expecting a `&str`. Storing your data as a `&str` instead takes up 16 additional bytes even when 
-/// its not needed in a `&str` representation. `Utf8Char` exists to fill this gap; "I have one codepoint 
-/// but I want to use it with `&str` taking APIs". It is as compact as and holds the same guarantees as a 
+///
+/// Encoding between a `char` and utf8 is expensive and branched, and clunky when you have a method
+/// expecting a `&str`. Storing your data as a `&str` instead takes up 16 additional bytes even when
+/// its not needed in a `&str` representation. `Utf8Char` exists to fill this gap; "I have one codepoint
+/// but I want to use it with `&str` taking APIs". It is as compact as and holds the same guarantees as a
 /// `char`, but has the convenience and performance of a `&str`.
 ///
-/// Not all char methods are provided, for most this is because their implementation 
-/// would look like `self.to_char().method()`, causing an unexpected net negative in 
+/// Not all `char` methods are provided, for most this is because their implementation
+/// would look like `self.to_char().method()`, causing an unexpected net negative in
 /// performance
 #[derive(Copy, Clone)]
 pub struct Utf8Char([u8; 4]);
@@ -50,12 +59,7 @@ impl Utf8Char {
     /// `byte` must be the first byte of a valid UTF-8 encoded codepoint.
     #[must_use]
     const fn codepoint_len(byte: u8) -> u8 {
-        #[expect(
-            clippy::cast_possible_truncation,
-            reason = "leading_ones returns a u32 for some reason, this will only return 1..=4 on valid utf8"
-        )]
-        let len = (byte.leading_ones().saturating_sub(1) + 1) as u8;
-        len
+        std_at_home::truncate_u8(byte.leading_ones().saturating_sub(1) + 1)
     }
 
     /// Returns the amount of bytes this codepoint takes up when encoded as utf8

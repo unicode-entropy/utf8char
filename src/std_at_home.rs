@@ -29,16 +29,7 @@ pub(crate) const fn from_char(code: char) -> Utf8Char {
     let code = code as u32;
 
     match len {
-        1 => {
-            out[0] = {
-                #[expect(
-                    clippy::cast_possible_truncation,
-                    reason = "len_utf8 said this is a 1 byte ascii subset, so it fits in u8"
-                )]
-                let code = code as u8;
-                code
-            }
-        }
+        1 => out[0] = truncate_u8(code),
         2 => {
             out[0] = (code >> 6 & 0x1F) as u8 | TAG_TWO;
             out[1] = (code & 0x3F) as u8 | TAG_CONTINUATION;
@@ -116,4 +107,16 @@ pub(crate) const fn to_char(code: Utf8Char) -> char {
 
     // SAFETY: Utf8Char must always be valid utf8 so this must always be valid
     unsafe { char::from_u32_unchecked(ch) }
+}
+
+/// Truncates a u32 to a u8, exists for clippy compliance until const traits let us use
+/// [`explicit_cast`](https://docs.rs/explicit_cast)
+pub(crate) const fn truncate_u8(v: u32) -> u8 {
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "this functions explicit definition is to truncate"
+    )]
+    let v = v as u8;
+
+    v
 }
