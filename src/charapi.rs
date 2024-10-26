@@ -1,11 +1,6 @@
-//! Containing file for API's that mimic `char` behaviour 
+//! Containing file for API's that mimic `char` behaviour
 
-use core::{
-    borrow::Borrow,
-    cmp::Ordering,
-    fmt,
-    hash::{Hash, Hasher},
-};
+use core::fmt;
 
 use super::Utf8Char;
 
@@ -27,9 +22,7 @@ impl fmt::Display for Utf8Char {
 }
 
 impl Utf8Char {
-
     pub const fn eq_ignore_ascii_case(self, other: Utf8Char) -> bool {
         false
     }
-
 }

@@ -21,6 +21,8 @@ use core::{
     ops::Deref,
 };
 
+use std_at_home::TAG_CONTINUATION;
+
 mod charapi;
 mod std_at_home;
 
@@ -112,13 +114,16 @@ impl Utf8Char {
         // utf8 (a safety invariant of str)
         unsafe { assume(s.len() >= len as usize) };
 
+        const PAD: u8 = TAG_CONTINUATION;
+
         // panic safety: we assume &str is valid utf8
         match len {
             // NOTE: We are a safety invariant, the [u8; 4] in Utf8Char must be valid utf8
-            // 0xff is used for padding as it is invalid utf8
-            1 => Self([b[0], 0xff, 0xff, 0xff]),
-            2 => Self([b[0], b[1], 0xff, 0xff]),
-            3 => Self([b[0], b[1], b[2], 0xff]),
+            // TAG_CONTINUATION is used for padding as it is a "valid" continuation character (for
+            // future niches)
+            1 => Self([b[0], PAD, PAD, PAD]),
+            2 => Self([b[0], b[1], PAD, PAD]),
+            3 => Self([b[0], b[1], b[2], PAD]),
             4 => Self([b[0], b[1], b[2], b[3]]),
             _ => panic!("unreachable: utf8 codepoints must be of length 1..=4"),
         }
@@ -127,6 +132,7 @@ impl Utf8Char {
     /// Creates a `Utf8Char` from a `char`
     #[must_use]
     pub const fn from_char(code: char) -> Self {
+        // uses TAG_CONTINUATION as padding
         std_at_home::from_char(code)
     }
 
@@ -217,7 +223,10 @@ impl PartialOrd for Utf8Char {
 
 impl PartialEq for Utf8Char {
     fn eq(&self, other: &Self) -> bool {
-        self.as_str().eq(other.as_str())
+        // hack: there is only one valid repr of a Utf8Char for a given codepoint
+        // we sealed this by allowing no mutation, and the only two creation methods both padding
+        // identically
+        self.0 == other.0
     }
 }
 
@@ -239,7 +248,7 @@ fn roundtrip() {
     use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
     ('\0'..=char::MAX).into_par_iter().for_each(|ch| {
-        let mut buf = [0xff; 4];
+        let mut buf = [TAG_CONTINUATION; 4];
 
         let s = ch.encode_utf8(&mut buf);
 
@@ -256,7 +265,9 @@ fn roundtrip() {
 
         assert_eq!(s, &*utf8);
         assert_eq!(&*utf8_alt, s);
+        // ensure internal repr is consistent
         assert_eq!(buf, utf8.0);
+        assert_eq!(buf, utf8_alt.0);
 
         assert_eq!(utf8.to_char(), ch);
         assert_eq!(utf8_alt.to_char(), ch);

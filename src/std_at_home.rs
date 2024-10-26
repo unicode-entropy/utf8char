@@ -3,6 +3,9 @@
 
 use super::Utf8Char;
 
+/// Continuation byte tag
+pub(crate) const TAG_CONTINUATION: u8 = 0b10_00_0000;
+
 /// Const modified copy of `char::encode_utf8`
 /// see inner comments for specific files and details
 pub(crate) const fn from_char(code: char) -> Utf8Char {
@@ -13,8 +16,6 @@ pub(crate) const fn from_char(code: char) -> Utf8Char {
     // encode_utf8 is const stable)
     // FIXME(1.83): const_mut_refs and encode_utf8 const stable as of 1.83
 
-    /// Continuation byte tag
-    const TAG_CONTINUATION: u8 = 0b1000_0000;
     /// Tag to represent 2 byte codepoint
     const TAG_TWO: u8 = 0b1100_0000;
     /// Tag to represent 3 byte codepoint
@@ -22,7 +23,7 @@ pub(crate) const fn from_char(code: char) -> Utf8Char {
     /// Tag to represent 4 byte codepoint
     const TAG_FOUR: u8 = 0b1111_0000;
 
-    let mut out = [0xff; 4];
+    let mut out = [TAG_CONTINUATION; 4];
 
     let len = code.len_utf8();
 
