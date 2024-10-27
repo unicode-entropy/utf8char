@@ -37,4 +37,32 @@ impl Utf8CharInner {
     pub(crate) const fn first_byte(&self) -> u8 {
         self.0
     }
+
+    /// Returns mutable reference to first byte
+    /// # Safety
+    /// - The first byte must never be illegal as the first byte of a utf8 codepoint
+    /// - The first byte must follow the first byte requirements of validity defined by the safety
+    ///   documentation of [Self::from_utf8char_array]
+    /// - The first byte must never change its "data portion" if doing so would result in an illegal utf8
+    ///   codepoint across the entire Utf8CharInner
+    /// - The first byte must never change its size tag (i/e a len: 1 first byte must still encode
+    ///   len: 1)
+    ///
+    /// If you want to change the entire Utf8CharInner, use [`total_repr_mut`][Self::total_repr_mut]
+    pub(crate) unsafe fn first_byte_mut(&mut self) -> &mut u8 {
+        &mut self.0
+    }
+
+    /// Returns mutable array reference to entire Utf8CharInner repr as a `&mut [u8; 4]`
+    /// # Safety
+    /// The array *must never* be mutated to a state where it does not follow the utf8char repr as
+    /// defined by the safety documentation of [Self::from_utf8char_array].
+    /// This includes "paired mutations", where one mutation sets an invalid state and a later
+    /// mutation brings it back to validity: that is UB. Prefer to do mutations to a copy and store
+    /// once in such cases.
+    pub(crate) unsafe fn total_repr_mut(&mut self) -> &mut [u8; 4] {
+        // SAFETY: this type is repr(C) and is a subset of [u8; 4]
+        // the caller agrees to not ever store an invalid repr
+        unsafe { &mut *(self as *mut Self).cast::<[u8; 4]>() }
+    }
 }

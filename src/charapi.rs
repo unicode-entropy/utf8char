@@ -21,6 +21,9 @@ impl fmt::Display for Utf8Char {
     }
 }
 
+// TODO(ultrabear): implement all of these
+// skip if the implementation would fallback to to_char().method()
+#[allow(unused)]
 impl Utf8Char {
     const fn eq_ignore_ascii_case(self, other: Self) -> bool {
         todo!()
@@ -35,6 +38,10 @@ impl Utf8Char {
     }
 
     const fn is_ascii(self) -> bool {
+        todo!()
+    }
+
+    const fn is_ascii_alphabetic(self) -> bool {
         todo!()
     }
 
