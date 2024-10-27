@@ -22,7 +22,23 @@ impl fmt::Display for Utf8Char {
 }
 
 impl Utf8Char {
-    pub const fn eq_ignore_ascii_case(self, other: Utf8Char) -> bool {
-        false
+    const fn eq_ignore_ascii_case(self, other: Self) -> bool {
+        todo!()
     }
+
+    fn make_ascii_lowercase(&mut self) {
+        todo!()
+    }
+
+    const fn to_ascii_lowercase(self) -> Self {
+        todo!()
+    }
+
+    const fn is_ascii(self) -> bool {
+        todo!()
+    }
+
+
+
+
 }

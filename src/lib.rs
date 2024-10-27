@@ -21,9 +21,11 @@ use core::{
     ops::Deref,
 };
 
+use representation::Utf8CharInner;
 use std_at_home::TAG_CONTINUATION;
 
 mod charapi;
+mod representation;
 mod std_at_home;
 
 /// A single unicode codepoint encoded in utf8.
@@ -51,7 +53,7 @@ mod std_at_home;
 /// would look like `self.to_char().method()`, causing an unexpected net negative in
 /// performance
 #[derive(Copy, Clone)]
-pub struct Utf8Char([u8; 4]);
+pub struct Utf8Char(Utf8CharInner);
 
 impl Utf8Char {
     /// Returns the length of a UTF-8 encoded codepoint based on the first bytes
@@ -65,8 +67,8 @@ impl Utf8Char {
 
     /// Returns the amount of bytes this codepoint takes up when encoded as utf8
     #[must_use]
-    pub const fn len_utf8(&self) -> u8 {
-        let len = Self::codepoint_len(self.0[0]);
+    pub const fn len_utf8(self) -> u8 {
+        let len = Self::codepoint_len(self.0.first_byte());
 
         // SAFETY: codepoint_len will always return 1..=4 for valid utf8, which Utf8Char is
         // always assumed to be
@@ -116,24 +118,27 @@ impl Utf8Char {
 
         const PAD: u8 = TAG_CONTINUATION;
 
-        // panic safety: we assume &str is valid utf8
-        match len {
-            // NOTE: We are a safety invariant, the [u8; 4] in Utf8Char must be valid utf8
-            // TAG_CONTINUATION is used for padding as it is a "valid" continuation character (for
-            // future niches)
-            1 => Self([b[0], PAD, PAD, PAD]),
-            2 => Self([b[0], b[1], PAD, PAD]),
-            3 => Self([b[0], b[1], b[2], PAD]),
-            4 => Self([b[0], b[1], b[2], b[3]]),
-            _ => panic!("unreachable: utf8 codepoints must be of length 1..=4"),
-        }
+        // SAFETY: we follow the valid utf8char representation; utf8 bytes followed by TAG_CONTINUATION
+        Self(unsafe {
+            Utf8CharInner::from_utf8char_array(match len {
+                // NOTE: We are a safety invariant, the [u8; 4] in Utf8Char must be valid utf8
+                1 => [b[0], PAD, PAD, PAD],
+                2 => [b[0], b[1], PAD, PAD],
+                3 => [b[0], b[1], b[2], PAD],
+                4 => [b[0], b[1], b[2], b[3]],
+                _ => panic!("unreachable: utf8 codepoints must be of length 1..=4"),
+            })
+        })
     }
 
     /// Creates a `Utf8Char` from a `char`
     #[must_use]
     pub const fn from_char(code: char) -> Self {
-        // uses TAG_CONTINUATION as padding
-        std_at_home::from_char(code)
+        // uses TAG_CONTINUATION as padding (a logical invariant)
+        // SAFETY: we follow the valid utf8char representation; utf8 bytes followed by TAG_CONTINUATION
+        Self(unsafe {
+            Utf8CharInner::from_utf8char_array(std_at_home::from_char(code, [TAG_CONTINUATION; 4]))
+        })
     }
 
     /// Converts a `Utf8Char` to a `char`
@@ -148,7 +153,7 @@ impl Utf8Char {
         let len = self.len_utf8() as usize;
 
         // SAFETY: byte_len will always return in the range 1..=4
-        let slice = unsafe { self.0.split_at_unchecked(len).0 };
+        let slice = unsafe { self.0.as_array().split_at_unchecked(len).0 };
 
         // SAFETY: [u8; byte_len] of Utf8Char must be valid Utf8
         unsafe { core::str::from_utf8_unchecked(slice) }
@@ -256,7 +261,7 @@ fn roundtrip() {
 
         let utf8 = Utf8Char::from_char(ch);
 
-        let codelen = Utf8Char::codepoint_len(utf8.0[0]);
+        let codelen = Utf8Char::codepoint_len(utf8.0.first_byte());
 
         assert!(matches!(codelen, 1..=4));
 
@@ -266,8 +271,8 @@ fn roundtrip() {
         assert_eq!(s, &*utf8);
         assert_eq!(&*utf8_alt, s);
         // ensure internal repr is consistent
-        assert_eq!(buf, utf8.0);
-        assert_eq!(buf, utf8_alt.0);
+        assert_eq!(&buf, utf8.0.as_array());
+        assert_eq!(&buf, utf8_alt.0.as_array());
 
         assert_eq!(utf8.to_char(), ch);
         assert_eq!(utf8_alt.to_char(), ch);

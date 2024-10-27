@@ -8,7 +8,8 @@ pub(crate) const TAG_CONTINUATION: u8 = 0b10_00_0000;
 
 /// Const modified copy of `char::encode_utf8`
 /// see inner comments for specific files and details
-pub(crate) const fn from_char(code: char) -> Utf8Char {
+/// the out array mimics encode_utf8's out array
+pub(crate) const fn from_char(code: char, mut out: [u8; 4]) -> [u8; 4] {
     // this method is provably correct for all unicode characters: it is tested
     // this entire function is a const modified copy of the implementation of char::encode_utf8 in
     // core/char/methods.rs
@@ -22,8 +23,6 @@ pub(crate) const fn from_char(code: char) -> Utf8Char {
     const TAG_THREE: u8 = 0b1110_0000;
     /// Tag to represent 4 byte codepoint
     const TAG_FOUR: u8 = 0b1111_0000;
-
-    let mut out = [TAG_CONTINUATION; 4];
 
     let len = code.len_utf8();
 
@@ -49,9 +48,9 @@ pub(crate) const fn from_char(code: char) -> Utf8Char {
         _ => panic!("unreachable: len_utf8 must always return 1..=4"),
     }
 
-    // NOTE: we are a safety invariant, Utf8Char must always be valid utf8
+    // NOTE: we are a safety invariant, this must be valid utf8
     // we rely on our copy paste of char::encode_utf8 encoding the char in the buffer
-    Utf8Char(out)
+    out
 }
 
 /// Const modified copy of `str::chars().next().unwrap_unchecked()`
@@ -79,7 +78,9 @@ pub(crate) const fn to_char(code: Utf8Char) -> char {
         (ch << 6) | (byte & B6) as u32
     }
 
-    let x = code.0[0];
+    let arr = code.0.as_array();
+
+    let x = arr[0];
 
     if x < 128 {
         return x as char;
@@ -87,19 +88,19 @@ pub(crate) const fn to_char(code: Utf8Char) -> char {
 
     let init = utf8_first_byte(x, 2);
 
-    let y = code.0[1];
+    let y = arr[1];
 
     let mut ch = utf8_acc_cont_byte(init, y);
 
     if x >= 0xE0 {
-        let z = code.0[2];
+        let z = arr[2];
 
         let y_z = utf8_acc_cont_byte((y & B6) as u32, z);
 
         ch = init << 12 | y_z;
 
         if x >= 0xF0 {
-            let w = code.0[3];
+            let w = arr[3];
             ch = (init & 7) << 18 | utf8_acc_cont_byte(y_z, w);
         }
     }
