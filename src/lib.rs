@@ -158,6 +158,7 @@ impl Utf8Char {
         // SAFETY: [u8; byte_len] of Utf8Char must be valid Utf8
         unsafe { core::str::from_utf8_unchecked(slice) }
     }
+
 }
 
 impl From<char> for Utf8Char {
@@ -228,10 +229,7 @@ impl PartialOrd for Utf8Char {
 
 impl PartialEq for Utf8Char {
     fn eq(&self, other: &Self) -> bool {
-        // hack: there is only one valid repr of a Utf8Char for a given codepoint
-        // we sealed this by allowing no mutation, and the only two creation methods both padding
-        // identically
-        self.0 == other.0
+        self.0.const_eq(other.0)
     }
 }
 

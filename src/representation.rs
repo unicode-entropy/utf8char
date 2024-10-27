@@ -38,6 +38,14 @@ impl Utf8CharInner {
         self.0
     }
 
+    pub(crate) const fn const_eq(self, other: Self) -> bool {
+        // NOTE: this relies on the representation guarantee that padding bytes are set to TAG_CONTINUATION
+        let this = u32::from_ne_bytes(*self.as_array());
+        let other = u32::from_ne_bytes(*other.as_array());
+
+        this == other
+    }
+
     /// Returns mutable reference to first byte
     /// # Safety
     /// - The first byte must never be illegal as the first byte of a utf8 codepoint
