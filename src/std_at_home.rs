@@ -6,53 +6,6 @@ use super::Utf8Char;
 /// Continuation byte tag
 pub(crate) const TAG_CONTINUATION: u8 = 0b10_00_0000;
 
-/// Const modified copy of `char::encode_utf8`
-/// see inner comments for specific files and details
-/// the out array mimics encode_utf8's out array
-pub(crate) const fn from_char(code: char, mut out: [u8; 4]) -> [u8; 4] {
-    // this method is provably correct for all unicode characters: it is tested
-    // this entire function is a const modified copy of the implementation of char::encode_utf8 in
-    // core/char/methods.rs
-    // FIXME(ultrabear): replace with encode_utf8 when const mut refs are stable (and
-    // encode_utf8 is const stable)
-    // FIXME(1.83): const_mut_refs and encode_utf8 const stable as of 1.83
-
-    /// Tag to represent 2 byte codepoint
-    const TAG_TWO: u8 = 0b1100_0000;
-    /// Tag to represent 3 byte codepoint
-    const TAG_THREE: u8 = 0b1110_0000;
-    /// Tag to represent 4 byte codepoint
-    const TAG_FOUR: u8 = 0b1111_0000;
-
-    let len = code.len_utf8();
-
-    let code = code as u32;
-
-    match len {
-        1 => out[0] = truncate_u8(code),
-        2 => {
-            out[0] = (code >> 6 & 0x1F) as u8 | TAG_TWO;
-            out[1] = (code & 0x3F) as u8 | TAG_CONTINUATION;
-        }
-        3 => {
-            out[0] = (code >> 12 & 0x0F) as u8 | TAG_THREE;
-            out[1] = (code >> 6 & 0x3F) as u8 | TAG_CONTINUATION;
-            out[2] = (code & 0x3F) as u8 | TAG_CONTINUATION;
-        }
-        4 => {
-            out[0] = (code >> 18 & 0x07) as u8 | TAG_FOUR;
-            out[1] = (code >> 12 & 0x3F) as u8 | TAG_CONTINUATION;
-            out[2] = (code >> 6 & 0x3F) as u8 | TAG_CONTINUATION;
-            out[3] = (code & 0x3F) as u8 | TAG_CONTINUATION;
-        }
-        _ => panic!("unreachable: len_utf8 must always return 1..=4"),
-    }
-
-    // NOTE: we are a safety invariant, this must be valid utf8
-    // we rely on our copy paste of char::encode_utf8 encoding the char in the buffer
-    out
-}
-
 /// Const modified copy of `str::chars().next().unwrap_unchecked()`
 /// see inner comments for details
 pub(crate) const fn to_char(code: Utf8Char) -> char {

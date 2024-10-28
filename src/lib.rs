@@ -137,10 +137,13 @@ impl Utf8Char {
     #[must_use]
     pub const fn from_char(code: char) -> Self {
         // uses TAG_CONTINUATION as padding (a logical invariant)
+
+        let mut buf = [TAG_CONTINUATION; 4];
+
+        code.encode_utf8(&mut buf);
+
         // SAFETY: we follow the valid utf8char representation; utf8 bytes followed by TAG_CONTINUATION
-        Self(unsafe {
-            Utf8CharInner::from_utf8char_array(std_at_home::from_char(code, [TAG_CONTINUATION; 4]))
-        })
+        Self(unsafe { Utf8CharInner::from_utf8char_array(buf) })
     }
 
     /// Converts a `Utf8Char` to a `char`
@@ -218,7 +221,7 @@ impl Hash for Utf8Char {
 
 impl Ord for Utf8Char {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.as_str().cmp(other.as_str())
+        self.0.ord(other.0)
     }
 }
 

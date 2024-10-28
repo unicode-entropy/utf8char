@@ -1,4 +1,4 @@
-use core::{mem, num::NonZeroU8};
+use core::{cmp::Ordering, mem, num::NonZeroU8};
 
 #[repr(C)]
 #[derive(Copy, Clone, Eq, PartialEq)]
@@ -46,6 +46,15 @@ impl Utf8CharInner {
         this == other
     }
 
+    pub(crate) fn ord(self, other: Self) -> Ordering {
+        // NOTE: this relies on the representation guarantee that padding bytes are set to TAG_CONTINUATION
+        // use big endian ordering because thats how utf8 ordering is implemented
+        let this = u32::from_be_bytes(*self.as_array());
+        let other = u32::from_be_bytes(*other.as_array());
+
+        this.cmp(&other)
+    }
+
     /// Returns mutable reference to first byte
     /// # Safety
     /// - The first byte must never be illegal as the first byte of a utf8 codepoint
@@ -57,7 +66,7 @@ impl Utf8CharInner {
     ///   len: 1)
     ///
     /// If you want to change the entire Utf8CharInner, use [`total_repr_mut`][Self::total_repr_mut]
-    pub(crate) unsafe fn first_byte_mut(&mut self) -> &mut u8 {
+    pub(crate) const unsafe fn first_byte_mut(&mut self) -> &mut u8 {
         &mut self.0
     }
 
@@ -68,7 +77,7 @@ impl Utf8CharInner {
     /// This includes "paired mutations", where one mutation sets an invalid state and a later
     /// mutation brings it back to validity: that is UB. Prefer to do mutations to a copy and store
     /// once in such cases.
-    pub(crate) unsafe fn total_repr_mut(&mut self) -> &mut [u8; 4] {
+    pub(crate) const unsafe fn total_repr_mut(&mut self) -> &mut [u8; 4] {
         // SAFETY: this type is repr(C) and is a subset of [u8; 4]
         // the caller agrees to not ever store an invalid repr
         unsafe { &mut *(self as *mut Self).cast::<[u8; 4]>() }

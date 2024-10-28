@@ -75,37 +75,33 @@ impl Utf8Char {
         matches!(self.ascii(), b'\t' | b'\n' | b'\x0C' | b'\r' | b' ')
     }
 
-    pub fn make_ascii_lowercase(&mut self) {
+    pub const fn make_ascii_lowercase(&mut self) {
         *self = self.to_ascii_lowercase();
     }
-    pub fn make_ascii_uppercase(&mut self) {
+    pub const fn make_ascii_uppercase(&mut self) {
         *self = self.to_ascii_uppercase();
     }
     pub const fn to_ascii_lowercase(mut self) -> Self {
         if self.is_ascii_uppercase() {
-            let mut arr = *self.0.as_array();
-
-            arr[0] += b'a' - b'A';
-
             // SAFETY: we only modify if is_ascii_uppercase is true (len: 1), taking it to another
             // valid ascii value (len: 1)
-            Self(unsafe { Utf8CharInner::from_utf8char_array(arr) })
-        } else {
-            self
+            let ascii = unsafe { self.0.first_byte_mut() };
+
+            *ascii += b'a' - b'A';
         }
+
+        self
     }
-    pub const fn to_ascii_uppercase(self) -> Self {
+    pub const fn to_ascii_uppercase(mut self) -> Self {
         if self.is_ascii_lowercase() {
-            let mut arr = *self.0.as_array();
-
-            arr[0] -= b'a' - b'A';
-
             // SAFETY: we only modify if is_ascii_lowercase is true (len: 1), taking it to another
             // valid ascii value (len: 1)
-            Self(unsafe { Utf8CharInner::from_utf8char_array(arr) })
-        } else {
-            self
+            let ascii = unsafe { self.0.first_byte_mut() };
+
+            *ascii -= b'a' - b'A';
         }
+
+        self
     }
 
     const fn is_digit(self, radix: u8) -> bool {

@@ -9,7 +9,7 @@ repository = "https://github.com/unicode-entropy/utf8char"
 description = "A crate that supplies a utf8 encoded char"
 readme = "README.md"
 license = "MPL-2.0"
-rust-version = "1.82"
+rust-version = "1.83"
 
 [[bench]]
 harness = false
