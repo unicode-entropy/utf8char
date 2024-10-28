@@ -27,6 +27,8 @@ use std_at_home::TAG_CONTINUATION;
 mod charapi;
 mod representation;
 mod std_at_home;
+#[cfg(test)]
+mod tests;
 
 /// A single unicode codepoint encoded in utf8.
 ///
@@ -247,9 +249,9 @@ extern crate alloc;
 
 #[test]
 fn roundtrip() {
-    use rayon::iter::{IntoParallelIterator, ParallelIterator};
+    use rayon::iter::ParallelIterator;
 
-    ('\0'..=char::MAX).into_par_iter().for_each(|ch| {
+    tests::all_chars().for_each(|ch| {
         let mut buf = [TAG_CONTINUATION; 4];
 
         let s = ch.encode_utf8(&mut buf);
@@ -286,54 +288,57 @@ fn displays() {
     use alloc::string::String;
     use core::{fmt::Write, write};
 
-    use rayon::iter::{IntoParallelIterator, ParallelIterator};
+    let test_char = |(bufutf8, bufutf32): &mut (String, String), utf32| {
+        let utf8 = Utf8Char::from_char(utf32);
 
-    ('\0'..=char::MAX).into_par_iter().for_each_with(
-        (String::new(), String::new()),
-        |(bufutf8, bufutf32), utf32| {
-            let utf8 = Utf8Char::from_char(utf32);
+        // Display
+        bufutf8.clear();
+        bufutf32.clear();
 
-            // Display
-            bufutf8.clear();
-            bufutf32.clear();
+        write!(bufutf8, "{utf8}").unwrap();
+        write!(bufutf32, "{utf32}").unwrap();
 
-            write!(bufutf8, "{utf8}").unwrap();
-            write!(bufutf32, "{utf32}").unwrap();
+        assert_eq!(bufutf8, bufutf32);
+        assert_eq!(bufutf8, utf8.as_str());
 
-            assert_eq!(bufutf8, bufutf32);
-            assert_eq!(bufutf8, utf8.as_str());
+        assert_eq!(Utf8Char::from_first_char(&bufutf8), Some(utf8));
+        assert_eq!(
+            unsafe { Utf8Char::from_first_char_unchecked(&bufutf8) },
+            utf8
+        );
 
-            assert_eq!(Utf8Char::from_first_char(&bufutf8), Some(utf8));
-            assert_eq!(
-                unsafe { Utf8Char::from_first_char_unchecked(&bufutf8) },
-                utf8
-            );
+        // Debug
+        bufutf8.clear();
+        bufutf32.clear();
 
-            // Debug
-            bufutf8.clear();
-            bufutf32.clear();
+        write!(bufutf8, "{utf8:?}").unwrap();
+        write!(bufutf32, "{utf32:?}").unwrap();
 
-            write!(bufutf8, "{utf8:?}").unwrap();
-            write!(bufutf32, "{utf32:?}").unwrap();
+        assert_eq!(bufutf8, bufutf32);
+    };
 
-            assert_eq!(bufutf8, bufutf32);
-        },
-    );
+    #[cfg(not(miri))]
+    {
+        use rayon::iter::ParallelIterator;
+        tests::all_chars().for_each_with((String::new(), String::new()), test_char);
+    }
+
+    #[cfg(miri)]
+    {
+        let mut bufs = (String::new(), String::new());
+
+        tests::all_chars().for_each(|ch| test_char(&mut bufs, ch));
+    }
 }
 
-#[cfg(feature = "tests_total_ordering")]
 #[test]
 fn total_ordering() {
-    use itertools::Itertools;
-    use rayon::iter::{ParallelBridge, ParallelIterator};
+    use rayon::iter::ParallelIterator;
 
-    ('\0'..=char::MAX)
-        .cartesian_product('\0'..=char::MAX)
-        .par_bridge()
-        .for_each(|(a, b)| {
-            let a_utf8 = Utf8Char::from_char(a);
-            let b_utf8 = Utf8Char::from_char(b);
+    tests::all_char_pairs().for_each(|(a, b)| {
+        let a_utf8 = Utf8Char::from_char(a);
+        let b_utf8 = Utf8Char::from_char(b);
 
-            assert_eq!(a_utf8.cmp(&b_utf8), a.cmp(&b))
-        });
+        assert_eq!(a_utf8.cmp(&b_utf8), a.cmp(&b))
+    });
 }

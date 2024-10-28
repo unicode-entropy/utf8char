@@ -2,6 +2,8 @@
 
 use core::fmt;
 
+use crate::representation::Utf8CharInner;
+
 use super::Utf8Char;
 
 impl fmt::Debug for Utf8Char {
@@ -33,57 +35,77 @@ impl Utf8Char {
         self.0.const_eq(other.0)
     }
 
-    const fn eq_ignore_ascii_case(self, other: Self) -> bool {
+    pub const fn eq_ignore_ascii_case(self, other: Self) -> bool {
         self.to_ascii_lowercase()
             .const_eq(other.to_ascii_lowercase())
     }
 
-    const fn is_ascii(self) -> bool {
+    pub const fn is_ascii(self) -> bool {
         matches!(self.ascii(), 0..=127)
     }
-    const fn is_ascii_alphabetic(self) -> bool {
+    pub const fn is_ascii_alphabetic(self) -> bool {
         self.is_ascii_lowercase() | self.is_ascii_uppercase()
     }
-    const fn is_ascii_alphanumeric(self) -> bool {
+    pub const fn is_ascii_alphanumeric(self) -> bool {
         self.is_ascii_alphabetic() | self.is_ascii_digit()
     }
-    const fn is_ascii_control(&self) -> bool {
+    pub const fn is_ascii_control(&self) -> bool {
         // copied from std char impl; I have no clue what counts
         matches!(self.ascii(), b'\0'..=b'\x1F' | b'\x7F')
     }
-    const fn is_ascii_digit(&self) -> bool {
+    pub const fn is_ascii_digit(&self) -> bool {
         matches!(self.ascii(), b'0'..=b'9')
     }
-    const fn is_ascii_graphic(&self) -> bool {
+    pub const fn is_ascii_graphic(&self) -> bool {
         matches!(self.ascii(), b'!'..=b'~')
     }
-    const fn is_ascii_hexdigit(&self) -> bool {
+    pub const fn is_ascii_hexdigit(&self) -> bool {
         matches!(self.ascii(), b'A'..=b'F' | b'a'..=b'f') | self.is_ascii_digit()
     }
-    const fn is_ascii_lowercase(&self) -> bool {
+    pub const fn is_ascii_lowercase(&self) -> bool {
         matches!(self.ascii(), b'a'..=b'z')
     }
-    const fn is_ascii_punctuation(&self) -> bool {
+    pub const fn is_ascii_punctuation(&self) -> bool {
         matches!(self.ascii(), b'!'..=b'/' | b':'..=b'@' | b'['..=b'`' | b'{'..=b'~')
     }
-    const fn is_ascii_uppercase(&self) -> bool {
+    pub const fn is_ascii_uppercase(&self) -> bool {
         matches!(self.ascii(), b'A'..=b'Z')
     }
-    const fn is_ascii_whitespace(&self) -> bool {
+    pub const fn is_ascii_whitespace(&self) -> bool {
         matches!(self.ascii(), b'\t' | b'\n' | b'\x0C' | b'\r' | b' ')
     }
 
-    fn make_ascii_lowercase(&mut self) {
+    pub fn make_ascii_lowercase(&mut self) {
         *self = self.to_ascii_lowercase();
     }
-    fn make_ascii_uppercase(&mut self) {
+    pub fn make_ascii_uppercase(&mut self) {
         *self = self.to_ascii_uppercase();
     }
-    const fn to_ascii_lowercase(self) -> Self {
-        todo!()
+    pub const fn to_ascii_lowercase(mut self) -> Self {
+        if self.is_ascii_uppercase() {
+            let mut arr = *self.0.as_array();
+
+            arr[0] += b'a' - b'A';
+
+            // SAFETY: we only modify if is_ascii_uppercase is true (len: 1), taking it to another
+            // valid ascii value (len: 1)
+            Self(unsafe { Utf8CharInner::from_utf8char_array(arr) })
+        } else {
+            self
+        }
     }
-    const fn to_ascii_uppercase(self) -> Self {
-        todo!()
+    pub const fn to_ascii_uppercase(self) -> Self {
+        if self.is_ascii_lowercase() {
+            let mut arr = *self.0.as_array();
+
+            arr[0] -= b'a' - b'A';
+
+            // SAFETY: we only modify if is_ascii_lowercase is true (len: 1), taking it to another
+            // valid ascii value (len: 1)
+            Self(unsafe { Utf8CharInner::from_utf8char_array(arr) })
+        } else {
+            self
+        }
     }
 
     const fn is_digit(self, radix: u8) -> bool {
@@ -92,4 +114,44 @@ impl Utf8Char {
     const fn to_digit(self, radix: u8) -> Option<u8> {
         todo!()
     }
+}
+
+#[test]
+fn charapi_matches() {
+    use rayon::iter::ParallelIterator;
+
+    crate::tests::all_chars().for_each(|c| {
+        let utf8 = Utf8Char::from_char(c);
+
+        macro_rules! identical {
+            ($($fn:ident),+) => {
+                $( assert_eq!(utf8.$fn(), c.$fn(), "{utf8:?}:{c:?}"); )+
+            };
+        }
+
+        identical!(
+            is_ascii,
+            is_ascii_alphabetic,
+            is_ascii_alphanumeric,
+            is_ascii_control,
+            is_ascii_digit,
+            is_ascii_graphic,
+            is_ascii_hexdigit,
+            is_ascii_lowercase,
+            is_ascii_punctuation,
+            is_ascii_uppercase,
+            is_ascii_whitespace
+        );
+
+        assert_eq!(utf8.to_ascii_lowercase().to_char(), c.to_ascii_lowercase());
+        assert_eq!(utf8.to_ascii_uppercase().to_char(), c.to_ascii_uppercase());
+
+        let mut newch = utf8;
+        newch.make_ascii_lowercase();
+        assert_eq!(newch, utf8.to_ascii_lowercase());
+
+        let mut newch = utf8;
+        newch.make_ascii_uppercase();
+        assert_eq!(newch, utf8.to_ascii_uppercase());
+    })
 }

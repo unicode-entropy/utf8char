@@ -11,9 +11,6 @@ readme = "README.md"
 license = "MPL-2.0"
 rust-version = "1.82"
 
-[features]
-tests_total_ordering = []
-
 [[bench]]
 harness = false
 name = "default"
@@ -27,4 +24,4 @@ rayon = "1.10.0"
 [dependencies]
 
 [profile.dev]
-opt-level = 1
+opt-level = 3
