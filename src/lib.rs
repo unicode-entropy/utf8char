@@ -158,7 +158,6 @@ impl Utf8Char {
         // SAFETY: [u8; byte_len] of Utf8Char must be valid Utf8
         unsafe { core::str::from_utf8_unchecked(slice) }
     }
-
 }
 
 impl From<char> for Utf8Char {
@@ -320,4 +319,21 @@ fn displays() {
             assert_eq!(bufutf8, bufutf32);
         },
     );
+}
+
+#[cfg(feature = "tests_total_ordering")]
+#[test]
+fn total_ordering() {
+    use itertools::Itertools;
+    use rayon::iter::{ParallelBridge, ParallelIterator};
+
+    ('\0'..=char::MAX)
+        .cartesian_product('\0'..=char::MAX)
+        .par_bridge()
+        .for_each(|(a, b)| {
+            let a_utf8 = Utf8Char::from_char(a);
+            let b_utf8 = Utf8Char::from_char(b);
+
+            assert_eq!(a_utf8.cmp(&b_utf8), a.cmp(&b))
+        });
 }
