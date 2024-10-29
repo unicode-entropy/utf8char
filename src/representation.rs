@@ -1,7 +1,8 @@
 use core::{cmp::Ordering, mem, num::NonZeroU8};
 
 #[repr(C)]
-#[derive(Copy, Clone, Eq, PartialEq)]
+// NOTE: Eq/Ord rely on the representation guarantee that padding bytes are set to TAG_CONTINUATION
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub(crate) struct Utf8CharInner(u8, [NonZeroU8; 3]);
 
 impl Utf8CharInner {
@@ -44,15 +45,6 @@ impl Utf8CharInner {
         let other = u32::from_ne_bytes(*other.as_array());
 
         this == other
-    }
-
-    pub(crate) fn ord(self, other: Self) -> Ordering {
-        // NOTE: this relies on the representation guarantee that padding bytes are set to TAG_CONTINUATION
-        // use big endian ordering because thats how utf8 ordering is implemented
-        let this = u32::from_be_bytes(*self.as_array());
-        let other = u32::from_be_bytes(*other.as_array());
-
-        this.cmp(&other)
     }
 
     /// Returns mutable reference to first byte

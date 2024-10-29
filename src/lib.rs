@@ -54,7 +54,7 @@ mod tests;
 /// Not all `char` methods are provided, for most this is because their implementation
 /// would look like `self.to_char().method()`, causing an unexpected net negative in
 /// performance
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Utf8Char(Utf8CharInner);
 
 impl Utf8Char {
@@ -218,26 +218,6 @@ impl Hash for Utf8Char {
         self.as_str().hash(state);
     }
 }
-
-impl Ord for Utf8Char {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.0.ord(other.0)
-    }
-}
-
-impl PartialOrd for Utf8Char {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.as_str().cmp(other.as_str()))
-    }
-}
-
-impl PartialEq for Utf8Char {
-    fn eq(&self, other: &Self) -> bool {
-        self.0.const_eq(other.0)
-    }
-}
-
-impl Eq for Utf8Char {}
 
 impl Deref for Utf8Char {
     type Target = str;
