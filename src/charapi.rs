@@ -27,10 +27,12 @@ impl fmt::Display for Utf8Char {
 // skip if the implementation would be faster as to_char().method()
 #[allow(unused)]
 impl Utf8Char {
+    /// Returns first byte of utf8char, more compact than writing `self.0.first_byte()`
     const fn ascii(self) -> u8 {
         self.0.first_byte()
     }
 
+    /// Const compatible equality method
     const fn const_eq(self, other: Self) -> bool {
         self.0.const_eq(other.0)
     }
@@ -104,11 +106,32 @@ impl Utf8Char {
         self
     }
 
-    const fn is_digit(self, radix: u8) -> bool {
+    pub const fn is_digit(self, radix: u8) -> bool {
         self.to_digit(radix).is_some()
     }
-    const fn to_digit(self, radix: u8) -> Option<u8> {
-        todo!()
+    pub const fn to_digit(self, radix: u8) -> Option<u8> {
+        // Copied completely from char::to_digit with slight tweaks to support a u8 based api
+
+        // wraps on out of bounds characters
+        let mut digit = self.ascii().wrapping_sub(b'0');
+
+        if radix > 10 {
+            assert!(radix <= 36, "to_digit: radix is too high (maximum 36)");
+            if digit < 10 {
+                return Some(digit);
+            }
+
+            // Set the 6th bit to ensure ascii is lowercase
+            digit = (self.ascii() | 0b10_0000)
+                .wrapping_sub(b'a')
+                .saturating_add(10);
+        }
+
+        if digit < radix {
+            Some(digit)
+        } else {
+            None
+        }
     }
 }
 
@@ -149,5 +172,13 @@ fn charapi_matches() {
         let mut newch = utf8;
         newch.make_ascii_uppercase();
         assert_eq!(newch, utf8.to_ascii_uppercase());
+
+        for radix in 0..=36 {
+            assert_eq!(utf8.is_digit(radix), c.is_digit(radix as u32));
+            assert_eq!(
+                utf8.to_digit(radix),
+                c.to_digit(radix as u32).map(|n| n as u8)
+            );
+        }
     })
 }
