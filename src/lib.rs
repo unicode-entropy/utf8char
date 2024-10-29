@@ -322,6 +322,10 @@ fn total_ordering() {
         let a_utf8 = Utf8Char::from_char(a);
         let b_utf8 = Utf8Char::from_char(b);
 
-        assert_eq!(a_utf8.cmp(&b_utf8), a.cmp(&b))
+        assert_eq!(a_utf8.cmp(&b_utf8), a.cmp(&b));
+        assert_eq!(
+            a_utf8.eq_ignore_ascii_case(b_utf8),
+            a.eq_ignore_ascii_case(&b)
+        );
     });
 }
