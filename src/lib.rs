@@ -116,21 +116,34 @@ impl Utf8Char {
 
         // SAFETY: string length must be greater than or equal to codepoint_len if it is encoded as valid
         // utf8 (a safety invariant of str)
-        unsafe { assume(s.len() >= len as usize) };
+        // forwards to assumes below: FIXME
+        unsafe { assume(b.len() >= len as usize) };
 
         const PAD: u8 = TAG_CONTINUATION;
 
+        let mut out = [b[0], PAD, PAD, PAD];
+
+        if len > 1 {
+            // SAFETY: FIXME compiler introduces panic branches despite above assume
+            unsafe { assume(b.len() > 1) }
+            out[1] = b[1];
+        }
+
+        if len > 2 {
+            // SAFETY: FIXME compiler introduces panic branches despite above assume
+            unsafe { assume(b.len() > 2) }
+            out[2] = b[2];
+        }
+
+        if len > 3 {
+            // SAFETY: FIXME compiler introduces panic branches despite above assume
+            unsafe { assume(b.len() > 3) }
+            out[3] = b[3];
+        }
+
+        // NOTE: We are a safety invariant, the [u8; 4] in Utf8Char must be valid utf8
         // SAFETY: we follow the valid utf8char representation; utf8 bytes followed by TAG_CONTINUATION
-        Self(unsafe {
-            Utf8CharInner::from_utf8char_array(match len {
-                // NOTE: We are a safety invariant, the [u8; 4] in Utf8Char must be valid utf8
-                1 => [b[0], PAD, PAD, PAD],
-                2 => [b[0], b[1], PAD, PAD],
-                3 => [b[0], b[1], b[2], PAD],
-                4 => [b[0], b[1], b[2], b[3]],
-                _ => panic!("unreachable: utf8 codepoints must be of length 1..=4"),
-            })
-        })
+        Self(unsafe { Utf8CharInner::from_utf8char_array(out) })
     }
 
     /// Creates a `Utf8Char` from a `char`
