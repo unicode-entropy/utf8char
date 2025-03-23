@@ -1,23 +1,26 @@
-use core::{cmp::Ordering, mem, num::NonZeroU8};
+//! Internal representation of `Utf8Char`
+
+use core::{mem, num::NonZeroU8, ptr};
 
 #[repr(C)]
-// NOTE: Eq/Ord rely on the representation guarantee that padding bytes are set to TAG_CONTINUATION
+// NOTE: Eq/Ord rely on the representation guarantee that padding bytes are set to `TAG_CONTINUATION`
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
+/// Internal representation of a `Utf8Char` with an unsafe API
 pub(crate) struct Utf8CharInner(u8, [NonZeroU8; 3]);
 
 impl Utf8CharInner {
-    /// Constructs a Utf8CharInner from an array of utf8char formatted data
-    /// (utf8char formatted data is utf8 where padding bytes are TAG_CONTINUATION, described below)
+    /// Constructs a `Utf8CharInner` from an array of utf8char formatted data
+    /// (utf8char formatted data is utf8 where padding bytes are `TAG_CONTINUATION`, described below)
     /// # Safety
     /// The following representation must be upheld:
-    /// Canonical representation of Utf8Char (logical and safety invariants
+    /// Canonical representation of `Utf8Char` (logical and safety invariants
     /// rely on this, rust cannot fully express it):
-    /// 1 byte: utf8, [TAG_CONTINUATION; 3]
-    /// 2 bytes: [utf8; 2], [TAG_CONTINUATION; 2]
-    /// 3 bytes: [utf8; 3], TAG_CONTINUATION
+    /// 1 byte: utf8, `[TAG_CONTINUATION; 3]`
+    /// 2 bytes: [utf8; 2], `[TAG_CONTINUATION; 2]`
+    /// 3 bytes: [utf8; 3], `TAG_CONTINUATION`
     /// 4 bytes: [utf8; 4]
-    /// byte 1 nicherepr: (u8 is ..0xFF) (NonMaxU8)
-    /// byte 2..=4 nicherepr: (u8 is TAG_CONTINUATION..=0b10_11_1111)
+    /// byte 1 nicherepr: `(u8 is ..0xFF)` (`NonMaxU8`)
+    /// byte 2..=4 nicherepr: `(u8 is TAG_CONTINUATION..=0b10_11_1111)`
     pub(crate) const unsafe fn from_utf8char_array(arr: [u8; 4]) -> Self {
         // TODO(ultrabear): debug_assume representation guarantees
 
@@ -31,14 +34,17 @@ impl Utf8CharInner {
         // SAFETY: this type is repr(C) and is a subset of [u8; 4]
         // it would be unsafe to allow mutable access as niches
         // could be invalidated, but it is safe to allow immutable access
-        unsafe { &*(self as *const Self).cast::<[u8; 4]>() }
+        unsafe { &*ptr::from_ref(self).cast::<[u8; 4]>() }
     }
 
     /// Returns first byte which is always dataful
-    pub(crate) const fn first_byte(&self) -> u8 {
+    pub(crate) const fn first_byte(self) -> u8 {
         self.0
     }
 
+    /// Performs an equality check that is compile time compatible
+    ///
+    /// NOT FOR CRYPTOGRAPHIC PURPOSES
     pub(crate) const fn const_eq(self, other: Self) -> bool {
         // NOTE: this relies on the representation guarantee that padding bytes are set to TAG_CONTINUATION
         let this = u32::from_ne_bytes(*self.as_array());
@@ -51,27 +57,28 @@ impl Utf8CharInner {
     /// # Safety
     /// - The first byte must never be illegal as the first byte of a utf8 codepoint
     /// - The first byte must follow the first byte requirements of validity defined by the safety
-    ///   documentation of [Self::from_utf8char_array]
+    ///   documentation of [`Self::from_utf8char_array`]
     /// - The first byte must never change its "data portion" if doing so would result in an illegal utf8
-    ///   codepoint across the entire Utf8CharInner
+    ///   codepoint across the entire `Utf8CharInner`
     /// - The first byte must never change its size tag (i/e a len: 1 first byte must still encode
     ///   len: 1)
     ///
-    /// If you want to change the entire Utf8CharInner, use [`total_repr_mut`][Self::total_repr_mut]
+    /// If you want to change the entire `Utf8CharInner`, use [`total_repr_mut`][Self::total_repr_mut]
     pub(crate) const unsafe fn first_byte_mut(&mut self) -> &mut u8 {
         &mut self.0
     }
 
-    /// Returns mutable array reference to entire Utf8CharInner repr as a `&mut [u8; 4]`
+    /// Returns mutable array reference to entire `Utf8CharInner` repr as a `&mut [u8; 4]`
     /// # Safety
     /// The array *must never* be mutated to a state where it does not follow the utf8char repr as
-    /// defined by the safety documentation of [Self::from_utf8char_array].
+    /// defined by the safety documentation of [`Self::from_utf8char_array`].
     /// This includes "paired mutations", where one mutation sets an invalid state and a later
-    /// mutation brings it back to validity: that is UB. Prefer to do mutations to a copy and store
-    /// once in such cases.
+    /// mutation brings it back to validity: that is UB. Prefer to do mutations to an array copy
+    /// and store once in such cases.
+    #[expect(dead_code, reason = "we may want this one day")]
     pub(crate) const unsafe fn total_repr_mut(&mut self) -> &mut [u8; 4] {
         // SAFETY: this type is repr(C) and is a subset of [u8; 4]
         // the caller agrees to not ever store an invalid repr
-        unsafe { &mut *(self as *mut Self).cast::<[u8; 4]>() }
+        unsafe { &mut *ptr::from_mut(self).cast::<[u8; 4]>() }
     }
 }

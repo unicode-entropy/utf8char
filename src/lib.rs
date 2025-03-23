@@ -119,6 +119,7 @@ impl Utf8Char {
         // forwards to assumes below: FIXME
         unsafe { assume(b.len() >= len as usize) };
 
+        #[expect(clippy::items_after_statements, reason = "its placed here because its only relevant here")]
         const PAD: u8 = TAG_CONTINUATION;
 
         let mut out = [b[0], PAD, PAD, PAD];
