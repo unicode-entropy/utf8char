@@ -6,7 +6,7 @@ use super::Utf8Char;
 
 impl fmt::Debug for Utf8Char {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // copying the implementation deemed too 
+        // copying the implementation deemed too
         // much of a maintenance burden for debug printing
         fmt::Debug::fmt(&self.to_char(), f)
     }
@@ -23,82 +23,70 @@ impl fmt::Display for Utf8Char {
     }
 }
 
+/// projects ascii is_* methods from u8 ascii methods
+macro_rules! project_ascii {
+        ($($name:ident),+,) => {
+            $(
+
+            #[must_use]
+            #[doc=concat!("equivalent to [`char::", stringify!($name), "`] for `Utf8Char`.")]
+            pub const fn $name(self) -> bool {
+                self.ascii().$name()
+            }
+
+            )+
+        }
+
+
+    }
+
 // TODO(ultrabear): implement all of these
 // skip if the implementation would be faster as to_char().method()
 #[allow(unused)]
 impl Utf8Char {
     /// Returns first byte of utf8char, more compact than writing `self.0.first_byte()`
+    #[must_use]
     const fn ascii(self) -> u8 {
         self.0.first_byte()
     }
 
     /// Const compatible equality method
+    #[must_use]
     const fn const_eq(self, other: Self) -> bool {
         self.0.const_eq(other.0)
     }
 
-    /// equivalent to [char::eq_ignore_ascii_case] for Utf8Char
+    /// equivalent to [`char::eq_ignore_ascii_case`] for `Utf8Char`
+    #[must_use]
     pub const fn eq_ignore_ascii_case(self, other: Self) -> bool {
         self.to_ascii_lowercase()
             .const_eq(other.to_ascii_lowercase())
     }
 
-    /// equivalent to [char::is_ascii] for Utf8Char
-    pub const fn is_ascii(self) -> bool {
-        matches!(self.ascii(), 0..=127)
-    }
-    /// equivalent to [char::is_ascii_alphabetic] for Utf8Char
-    pub const fn is_ascii_alphabetic(self) -> bool {
-        self.is_ascii_lowercase() | self.is_ascii_uppercase()
-    }
+    project_ascii!(
+        is_ascii,
+        is_ascii_alphabetic,
+        is_ascii_alphanumeric,
+        is_ascii_control,
+        is_ascii_digit,
+        is_ascii_graphic,
+        is_ascii_hexdigit,
+        is_ascii_lowercase,
+        is_ascii_punctuation,
+        is_ascii_uppercase,
+        is_ascii_whitespace,
+    );
 
-    /// equivalent to [char::is_ascii_alphanumeric] for Utf8Char
-    pub const fn is_ascii_alphanumeric(self) -> bool {
-        self.is_ascii_alphabetic() | self.is_ascii_digit()
-    }
-    /// equivalent to [char::is_ascii_control] for Utf8Char
-    pub const fn is_ascii_control(&self) -> bool {
-        // copied from std char impl; I have no clue what counts
-        matches!(self.ascii(), b'\0'..=b'\x1F' | b'\x7F')
-    }
-    /// equivalent to [char::is_ascii_digit] for Utf8Char
-    pub const fn is_ascii_digit(&self) -> bool {
-        matches!(self.ascii(), b'0'..=b'9')
-    }
-    /// equivalent to [char::is_ascii_graphic] for Utf8Char
-    pub const fn is_ascii_graphic(&self) -> bool {
-        matches!(self.ascii(), b'!'..=b'~')
-    }
-    /// equivalent to [char::is_ascii_hexdigit] for Utf8Char
-    pub const fn is_ascii_hexdigit(&self) -> bool {
-        matches!(self.ascii(), b'A'..=b'F' | b'a'..=b'f') | self.is_ascii_digit()
-    }
-    /// equivalent to [char::is_ascii_lowercase] for Utf8Char
-    pub const fn is_ascii_lowercase(&self) -> bool {
-        matches!(self.ascii(), b'a'..=b'z')
-    }
-    /// equivalent to [char::is_ascii_punctuation] for Utf8Char
-    pub const fn is_ascii_punctuation(&self) -> bool {
-        matches!(self.ascii(), b'!'..=b'/' | b':'..=b'@' | b'['..=b'`' | b'{'..=b'~')
-    }
-    /// equivalent to [char::is_ascii_uppercase] for Utf8Char
-    pub const fn is_ascii_uppercase(&self) -> bool {
-        matches!(self.ascii(), b'A'..=b'Z')
-    }
-    /// equivalent to [char::is_ascii_whitespace] for Utf8Char
-    pub const fn is_ascii_whitespace(&self) -> bool {
-        matches!(self.ascii(), b'\t' | b'\n' | b'\x0C' | b'\r' | b' ')
-    }
-
-    /// equivalent to [char::make_ascii_lowercase] for Utf8Char
+    /// equivalent to [`char::make_ascii_lowercase`] for `Utf8Char`
     pub const fn make_ascii_lowercase(&mut self) {
         *self = self.to_ascii_lowercase();
     }
-    /// equivalent to [char::make_ascii_uppercase] for Utf8Char
+    /// equivalent to [`char::make_ascii_uppercase`] for `Utf8Char`
     pub const fn make_ascii_uppercase(&mut self) {
         *self = self.to_ascii_uppercase();
     }
-    /// equivalent to [char::to_ascii_lowercase] for Utf8Char
+    /// equivalent to [`char::to_ascii_lowercase`] for `Utf8Char`
+    #[must_use]
     pub const fn to_ascii_lowercase(mut self) -> Self {
         if self.is_ascii_uppercase() {
             // SAFETY: we only modify if is_ascii_uppercase is true (len: 1), taking it to another
@@ -110,7 +98,8 @@ impl Utf8Char {
 
         self
     }
-    /// equivalent to [char::to_ascii_uppercase] for Utf8Char
+    /// equivalent to [`char::to_ascii_uppercase`] for `Utf8Char`
+    #[must_use]
     pub const fn to_ascii_uppercase(mut self) -> Self {
         if self.is_ascii_lowercase() {
             // SAFETY: we only modify if is_ascii_lowercase is true (len: 1), taking it to another
@@ -123,11 +112,13 @@ impl Utf8Char {
         self
     }
 
-    /// equivalent to [char::is_digit] for Utf8Char
+    /// equivalent to [`char::is_digit`] for `Utf8Char`
+    #[must_use]
     pub const fn is_digit(self, radix: u8) -> bool {
         self.to_digit(radix).is_some()
     }
-    /// equivalent to [char::to_digit] for Utf8Char
+    /// equivalent to [`char::to_digit`] for `Utf8Char`
+    #[must_use]
     pub const fn to_digit(self, radix: u8) -> Option<u8> {
         // Copied completely from char::to_digit with slight tweaks to support a u8 based api
 
