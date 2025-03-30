@@ -24,6 +24,7 @@ use core::{
 use representation::Utf8CharInner;
 use std_at_home::TAG_CONTINUATION;
 
+mod iter;
 mod charapi;
 mod representation;
 mod std_at_home;
