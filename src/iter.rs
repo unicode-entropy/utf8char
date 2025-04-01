@@ -76,11 +76,11 @@ impl<'slice> Utf8CharIter<'slice> {
 
     /// Constructs a new `Utf8CharIter` from a string slice, borrowing the slice
     fn new(s: &'slice str) -> Self {
-        // SAFETY: String reference cannot be null
-        let ptr = unsafe { NonNull::new_unchecked(s.as_ptr().cast_mut()) };
+        // casting NonNull<[u8]> to NonNull<u8> to act as start pointer
+        let ptr = NonNull::from(s.as_bytes()).cast::<u8>();
 
-        // SAFETY: It is always sound to add the length of an allocation to its start pointer, see
-        // ptr::add docs for clarification
+        // SAFETY: It is always sound to add the length of an allocation to 
+        // its start pointer, see ptr::add docs for clarification
         let end = unsafe { ptr.add(s.len()) };
 
         // lexically express captured lifetime
