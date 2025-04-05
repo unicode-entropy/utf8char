@@ -63,15 +63,3 @@ pub(crate) const fn to_char(code: Utf8Char) -> char {
     // SAFETY: Utf8Char must always be valid utf8 so this must always be valid
     unsafe { char::from_u32_unchecked(ch) }
 }
-
-/// Truncates a u32 to a u8, exists for clippy compliance until const traits let us use
-/// [`explicit_cast`](https://docs.rs/explicit_cast)
-pub(crate) const fn truncate_u8(v: u32) -> u8 {
-    #[expect(
-        clippy::cast_possible_truncation,
-        reason = "this functions explicit definition is to truncate"
-    )]
-    let v = v as u8;
-
-    v
-}

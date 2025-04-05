@@ -2,13 +2,89 @@
 
 use core::{mem, num::NonZeroU8, ptr};
 
+/// An implementation of codepoint_len that depends on bmi/tzcnt to be fast
+pub(crate) const fn codepoint_len_bmi(byte: u8) -> u8 {
+    (byte.leading_ones().saturating_sub(1) + 1) as u8
+}
+
+/// An implementation of codepoint_len that should be fast on all architectures
+pub(crate) const fn codepoint_len_lut(byte: u8) -> u8 {
+    const LUT_SIZE: usize = 16;
+
+    // rely on utf8 that first 4 bits can be used to build a lookup table of the length
+    const LUT: [u8; LUT_SIZE] = {
+        let mut i = 0;
+        let mut arr = [0; LUT_SIZE];
+        while i < LUT_SIZE {
+            arr[i] = codepoint_len_bmi((i as u8) << 4);
+            i += 1;
+        }
+        arr
+    };
+    LUT[(byte >> 4) as usize]
+}
+
+#[test]
+fn identical_codepoint_len() {
+    use crate::tests;
+
+    use rayon::iter::ParallelIterator;
+
+    tests::all_chars().for_each(|c| {
+        let first = crate::Utf8Char::from_char(c).0.first_byte().0;
+
+        let control = c.len_utf8() as u8;
+
+        assert_eq!(codepoint_len_bmi(first), control);
+        assert_eq!(codepoint_len_lut(first), control);
+    });
+}
+
+#[derive(Copy, Clone, Debug)]
+#[repr(u8)]
+#[expect(dead_code, reason = "we transmute into/outof these values")]
+pub(crate) enum EncodedLength {
+    One = 1,
+    Two,
+    Three,
+    Four,
+}
+
+/// The first and potentially only byte of a utf8 encoded codepoint
+// Safety invariant: `u8 is 0..0xff` & `u8 is only a firstbyte of a utf8 codepoint`
+#[repr(transparent)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub(crate) struct Utf8FirstByte(pub(crate) u8);
+
+impl Utf8FirstByte {
+    /// Constructs a new Utf8CharFirstByte from an arbitrary u8
+    ///
+    /// # Safety
+    /// value passed must be a valid utf8 encoded characters first byte
+    pub(crate) const unsafe fn new(b: u8) -> Self {
+        Self(b)
+    }
+
+    pub(crate) const fn codepoint_len(self) -> EncodedLength {
+        let len: u8 = codepoint_len_lut(self.0);
+
+        // SAFETY: Utf8CharEncodedLength is repr(u8), Utf8Char::codepoint_len will return 1..=4 for
+        // any valid utf8 codepoint first byte, which this type stores as a safety invariant
+        unsafe { mem::transmute(len) }
+    }
+}
+
 #[repr(C)]
 // NOTE: Eq/Ord rely on the representation guarantee that padding bytes are set to `TAG_CONTINUATION`
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
 /// Internal representation of a `Utf8Char` with an unsafe API
-pub(crate) struct Utf8CharInner(u8, [NonZeroU8; 3]);
+pub(crate) struct Utf8CharInner(Utf8FirstByte, [NonZeroU8; 3]);
 
 impl Utf8CharInner {
+    pub(crate) const fn len_utf8(self) -> EncodedLength {
+        self.0.codepoint_len()
+    }
+
     /// Constructs a `Utf8CharInner` from an array of utf8char formatted data
     /// (utf8char formatted data is utf8 where padding bytes are `TAG_CONTINUATION`, described below)
     /// # Safety
@@ -38,7 +114,7 @@ impl Utf8CharInner {
     }
 
     /// Returns first byte which is always dataful
-    pub(crate) const fn first_byte(self) -> u8 {
+    pub(crate) const fn first_byte(self) -> Utf8FirstByte {
         self.0
     }
 
@@ -64,7 +140,7 @@ impl Utf8CharInner {
     ///   len: 1)
     ///
     /// If you want to change the entire `Utf8CharInner`, use [`total_repr_mut`][Self::total_repr_mut]
-    pub(crate) const unsafe fn first_byte_mut(&mut self) -> &mut u8 {
+    pub(crate) const unsafe fn first_byte_mut(&mut self) -> &mut Utf8FirstByte {
         &mut self.0
     }
 

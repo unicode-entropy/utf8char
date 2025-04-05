@@ -21,7 +21,7 @@ use core::{
     ops::Deref,
 };
 
-use representation::Utf8CharInner;
+use representation::{codepoint_len_lut, Utf8CharInner};
 use std_at_home::TAG_CONTINUATION;
 
 mod iter;
@@ -65,19 +65,14 @@ impl Utf8Char {
     /// `byte` must be the first byte of a valid UTF-8 encoded codepoint.
     #[must_use]
     const fn codepoint_len(byte: u8) -> u8 {
-        std_at_home::truncate_u8(byte.leading_ones().saturating_sub(1) + 1)
+        codepoint_len_lut(byte)
     }
 
     /// Returns the amount of bytes this codepoint takes up when encoded as utf8
     #[must_use]
     pub const fn len_utf8(self) -> u8 {
-        let len = Self::codepoint_len(self.0.first_byte());
 
-        // SAFETY: codepoint_len will always return 1..=4 for valid utf8, which Utf8Char is
-        // always assumed to be
-        unsafe { assume(1 <= len && len <= 4) };
-
-        len
+        self.0.len_utf8() as u8
     }
 
     /// returns a `Utf8Char` from the first char of a passed `&str`. Returns None if the string
@@ -258,7 +253,7 @@ fn roundtrip() {
 
         let utf8 = Utf8Char::from_char(ch);
 
-        let codelen = Utf8Char::codepoint_len(utf8.0.first_byte());
+        let codelen = Utf8Char::codepoint_len(utf8.0.first_byte().0);
 
         assert!(matches!(codelen, 1..=4));
 

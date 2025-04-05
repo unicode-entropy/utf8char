@@ -44,10 +44,10 @@ macro_rules! project_ascii {
 // skip if the implementation would be faster as to_char().method()
 #[allow(unused)]
 impl Utf8Char {
-    /// Returns first byte of utf8char, more compact than writing `self.0.first_byte()`
+    /// Returns first byte of utf8char, more compact than writing `self.0.first_byte().0`
     #[must_use]
     const fn ascii(self) -> u8 {
-        self.0.first_byte()
+        self.0.first_byte().0
     }
 
     /// Const compatible equality method
@@ -93,7 +93,7 @@ impl Utf8Char {
             // valid ascii value (len: 1)
             let ascii = unsafe { self.0.first_byte_mut() };
 
-            *ascii += b'a' - b'A';
+            ascii.0 += b'a' - b'A';
         }
 
         self
@@ -106,7 +106,7 @@ impl Utf8Char {
             // valid ascii value (len: 1)
             let ascii = unsafe { self.0.first_byte_mut() };
 
-            *ascii -= b'a' - b'A';
+            ascii.0 -= b'a' - b'A';
         }
 
         self
@@ -126,7 +126,10 @@ impl Utf8Char {
         let mut digit = self.ascii().wrapping_sub(b'0');
 
         if radix > 10 {
-            assert!(radix <= 36, "to_digit: radix is too high (maximum 36)");
+            assert!(
+                radix >= 2 && radix <= 36,
+                "to_digit: invalid radix -- radix must be in the range 2 to 36 inclusive"
+            );
             if digit < 10 {
                 return Some(digit);
             }
@@ -183,7 +186,7 @@ fn charapi_matches() {
         newch.make_ascii_uppercase();
         assert_eq!(newch, utf8.to_ascii_uppercase());
 
-        for radix in 0..=36 {
+        for radix in 2..=36 {
             assert_eq!(utf8.is_digit(radix), c.is_digit(radix as u32));
             assert_eq!(
                 utf8.to_digit(radix),
