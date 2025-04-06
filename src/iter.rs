@@ -2,7 +2,14 @@
 
 use core::{iter::FusedIterator, slice};
 
-use crate::{representation::Utf8FirstByte, Utf8Char};
+use crate::{representation::Utf8FirstByte, Utf8Char, Utf8CharInner, TAG_CONTINUATION};
+
+/// Returns whether a given utf8 byte is a continuation byte
+fn is_continuation(b: u8) -> bool {
+    const TAG_MASK: u8 = 0b1100_0000;
+
+    (b & TAG_MASK) == TAG_CONTINUATION
+}
 
 /// An iterator over a string that yields `Utf8Char`'s
 #[derive(Clone, Debug)]
@@ -20,6 +27,15 @@ impl<'slice> Utf8CharIter<'slice> {
     unsafe fn next_byte_unchecked(&mut self) -> u8 {
         // SAFETY: Caller asserts there is at least one byte left in the backing iterator
         *unsafe { self.inner.next().unwrap_unchecked() }
+    }
+
+    /// Returns the next byte from the back of the iterator
+    ///
+    /// # Safety
+    /// There must be at least one byte left in the backing iterator
+    unsafe fn next_byte_back_unchecked(&mut self) -> u8 {
+        // SAFETY: Caller asserts there is at least one byte left in the backing iterator
+        *unsafe { self.inner.next_back().unwrap_unchecked() }
     }
 
     /// Constructs a new `Utf8CharIter` from a string slice, borrowing the slice
@@ -73,6 +89,43 @@ impl<'slice> Utf8CharIter<'slice> {
         ch
     }
 
+    /// Returns the next Utf8Char from the back of the backing slice
+    ///
+    /// # Safety
+    /// There must be at least one char available in the backing slice
+    unsafe fn next_back_unchecked(&mut self) -> Utf8Char {
+        let mut arr = [0; 4];
+        let mut len = 1;
+
+        while len <= 4 {
+            // SAFETY: len is 1..=4, 4-1 is 3, 4-4 is 0, no underflow occurs
+            let idx = unsafe { 4usize.unchecked_sub(len) };
+            // SAFETY: if previous iteration was continuation byte there is at least one more byte
+            // to read, otherwise on first iteration caller ensures there is at least one byte to
+            // read
+            arr[idx] = unsafe { self.next_byte_back_unchecked() };
+
+            if !is_continuation(arr[idx]) {
+                break;
+            }
+
+            len += 1;
+        }
+
+        let mut bits = u32::from_be_bytes(arr);
+
+        // SAFETY: len is 1..=4, will not underflow, generates 0..=3, 3*8 is 24, will not overflow
+        // shl to align utf8 to start
+        bits <<= unsafe { 4usize.unchecked_sub(len).unchecked_mul(8) };
+
+        // apply TAG_CONTINUATION or'ng to make valid utf8charinner representation
+        bits |= const { u32::from_be_bytes([0, TAG_CONTINUATION, TAG_CONTINUATION, TAG_CONTINUATION]) };
+
+        // SAFETY: bits matches representation of utf8charinner with padding bytes and all other bytes
+        // being part of a single utf8 encoded character
+        Utf8Char(unsafe { Utf8CharInner::from_utf8char_array(bits.to_be_bytes()) })
+    }
+
     fn is_empty(&self) -> bool {
         self.inner.as_slice().is_empty()
     }
@@ -101,7 +154,28 @@ impl Iterator for Utf8CharIter<'_> {
     where
         Self: Sized,
     {
+        // std has an optimized implementation for us to take advantage of
+        // optimizes to no overhead
         self.as_str().chars().count()
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        // use the stdlib implementation, optimizes to no overhead
+        self.as_str().chars().size_hint()
+    }
+
+    fn last(mut self) -> Option<Self::Item> {
+        self.next_back()
+    }
+}
+
+impl DoubleEndedIterator for Utf8CharIter<'_> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        if self.is_empty() {
+            None
+        } else {
+            Some(unsafe { self.next_back_unchecked() })
+        }
     }
 }
 
@@ -119,7 +193,24 @@ fn allstring() {
 
     assert_eq!(utf8chars.clone().count(), chars.clone().count());
 
-    utf8chars.zip_eq(chars).for_each(|(u8c, c)| {
-        assert_eq!(u8c.to_char(), c);
-    })
+    utf8chars
+        .clone()
+        .zip_eq(chars.clone())
+        .for_each(|(u8c, c)| {
+            assert_eq!(u8c.to_char(), c);
+
+            // ensures bitrepr compatibility is upheld
+            assert_eq!(Utf8Char::from_char(u8c.to_char()), u8c);
+        });
+
+    utf8chars
+        .rev()
+        .zip_eq(chars.rev())
+        .for_each(|(u8c, c)|  { 
+            assert_eq!(u8c.to_char(), c); 
+
+            // ensures bitrepr compatibility is upheld
+            assert_eq!(Utf8Char::from_char(u8c.to_char()), u8c);
+
+        });
 }
