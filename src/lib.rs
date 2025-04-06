@@ -24,8 +24,8 @@ use core::{
 use representation::{codepoint_len_lut, Utf8CharInner};
 use std_at_home::TAG_CONTINUATION;
 
-mod iter;
 mod charapi;
+mod iter;
 mod representation;
 mod std_at_home;
 #[cfg(test)]
@@ -71,7 +71,6 @@ impl Utf8Char {
     /// Returns the amount of bytes this codepoint takes up when encoded as utf8
     #[must_use]
     pub const fn len_utf8(self) -> u8 {
-
         self.0.len_utf8() as u8
     }
 
@@ -115,7 +114,10 @@ impl Utf8Char {
         // forwards to assumes below: FIXME
         unsafe { assume(b.len() >= len as usize) };
 
-        #[expect(clippy::items_after_statements, reason = "its placed here because its only relevant here")]
+        #[expect(
+            clippy::items_after_statements,
+            reason = "its placed here because its only relevant here"
+        )]
         const PAD: u8 = TAG_CONTINUATION;
 
         let mut out = [b[0], PAD, PAD, PAD];

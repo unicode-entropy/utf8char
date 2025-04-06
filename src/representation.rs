@@ -44,7 +44,10 @@ fn identical_codepoint_len() {
 
 #[derive(Copy, Clone, Debug)]
 #[repr(u8)]
-#[expect(dead_code, reason = "we transmute into/outof these values, rust cant see it")]
+#[expect(
+    dead_code,
+    reason = "we transmute into/outof these values, rust cant see it"
+)]
 pub(crate) enum EncodedLength {
     One = 1,
     Two,

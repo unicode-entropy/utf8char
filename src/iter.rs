@@ -1,6 +1,7 @@
 //! Implements an Iterator on strings that provide Utf8Char's
 
 use core::{
+    hint::assert_unchecked,
     iter::FusedIterator,
     marker::PhantomData,
     ptr::{self, NonNull},
@@ -57,6 +58,7 @@ impl<'slice> Utf8CharIter<'slice> {
         //
         // this is a very idiomatic way to copy these bytes, its possibly not very efficient but it
         // is trivially correct
+
         unsafe {
             ptr::copy_nonoverlapping(start.as_ptr(), buf.as_mut_ptr(), n as usize);
             start = start.add(n as usize);
