@@ -19,7 +19,7 @@ pub struct Utf8CharIter<'slice> {
 }
 
 /// Crafted so as to optimize into nothing, but give us raw copies of the pointers
-fn iter_to_raw<'a>(s: &slice::Iter<'a, u8>) -> (NonNull<u8>, NonNull<u8>, PhantomData<&'a str>) {
+fn iter_to_raw<'a>(s: slice::Iter<'a, u8>) -> (NonNull<u8>, NonNull<u8>, PhantomData<&'a str>) {
     let r = s.as_slice().as_ptr_range();
 
     (
@@ -50,7 +50,7 @@ impl<'slice> Utf8CharIter<'slice> {
     /// # Safety
     /// There must be at least `n` bytes available in the backing iterator
     unsafe fn fill_buf(&mut self, buf: &mut [u8; 4], n: EncodedLength) {
-        let (mut start, end, lt) = iter_to_raw(&self.inner);
+        let (mut start, end, lt) = iter_to_raw(self.inner.clone());
 
         // SAFETY: caller has ensured backing iterator has enough bytes to fill the requested
         // amount of 1..=4 and advance the iterator by the same amount
@@ -73,7 +73,7 @@ impl<'slice> Utf8CharIter<'slice> {
     /// # Safety
     /// The backing iterator must have at least one extra byte available for reading
     unsafe fn peek_unchecked(&self) -> u8 {
-        let (read, _, _) = iter_to_raw(&self.inner);
+        let (read, _, _) = iter_to_raw(self.inner.clone());
 
         // SAFETY: Caller has asserted there is at least one byte left to be read
         unsafe { read.read() }
