@@ -69,7 +69,7 @@ impl<'slice> Utf8CharIter<'slice> {
     }
 
     /// Constructs a new `Utf8CharIter` from a string slice, borrowing the slice
-    fn new(s: &'slice str) -> Self {
+    pub fn new(s: &'slice str) -> Self {
         Self {
             inner: s.as_bytes().iter(),
         }
@@ -156,3 +156,20 @@ impl Iterator for Utf8CharIter<'_> {
 }
 
 impl FusedIterator for Utf8CharIter<'_> {}
+
+#[test]
+fn allstring() {
+    use itertools::Itertools;
+
+    let allchars = (char::MIN..=char::MAX).collect::<alloc::string::String>();
+
+    let utf8chars = Utf8CharIter::new(&allchars);
+
+    let chars = allchars.chars();
+
+    assert_eq!(utf8chars.clone().count(), chars.clone().count());
+
+    utf8chars.zip_eq(chars).for_each(|(u8c, c)| {
+        assert_eq!(u8c.to_char(), c);
+    })
+}

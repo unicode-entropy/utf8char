@@ -25,7 +25,7 @@ use representation::{codepoint_len_lut, Utf8CharInner};
 use std_at_home::TAG_CONTINUATION;
 
 mod charapi;
-mod iter;
+pub mod iter;
 mod representation;
 mod std_at_home;
 #[cfg(test)]
