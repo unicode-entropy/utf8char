@@ -31,12 +31,14 @@ fn identical_codepoint_len() {
     use rayon::iter::ParallelIterator;
 
     tests::all_chars().for_each(|c| {
-        let first = crate::Utf8Char::from_char(c).0.first_byte().0;
+        let u8c = crate::Utf8Char::from_char(c);
+        let first = u8c.0.first_byte().0;
 
         let control = c.len_utf8() as u8;
 
         assert_eq!(codepoint_len_bmi(first), control);
         assert_eq!(codepoint_len_lut(first), control);
+        assert_eq!(u8c.len_utf8(), control);
     });
 }
 
