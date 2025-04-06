@@ -4,6 +4,7 @@ use core::{
     iter::FusedIterator,
     marker::PhantomData,
     ptr::{self, NonNull},
+    slice,
 };
 
 use crate::{
@@ -14,13 +15,33 @@ use crate::{
 /// An iterator over a string that yields `Utf8Char`'s
 // modeled after slice::Iter
 pub struct Utf8CharIter<'slice> {
-    /// start pointer that is incremented on iter::next
-    ptr: NonNull<u8>,
-    /// end pointer that is beyond the provenance range
-    end: NonNull<u8>,
+    inner: slice::Iter<'slice, u8>,
+}
 
-    /// Phantom lifetime of our backing string
-    lifetime: PhantomData<&'slice str>,
+/// Crafted so as to optimize into nothing, but give us raw copies of the pointers
+fn iter_to_raw<'a>(s: &slice::Iter<'a, u8>) -> (NonNull<u8>, NonNull<u8>, PhantomData<&'a str>) {
+    let r = s.as_slice().as_ptr_range();
+
+    (
+        // SAFETY: slice::Iter pointers cannot be null
+        unsafe { NonNull::new_unchecked(r.start.cast_mut()) },
+        // SAFETY: slice::Iter pointers cannot be null
+        unsafe { NonNull::new_unchecked(r.end.cast_mut()) },
+        PhantomData,
+    )
+}
+
+/// SAFETY: start, end, and lt must be derived from iter_to_raw
+unsafe fn raw_to_iter<'a>(
+    start: NonNull<u8>,
+    end: NonNull<u8>,
+    lt: PhantomData<&'a str>,
+) -> slice::Iter<'a, u8> {
+    let _consumed_in_typesignature = lt;
+
+    // SAFETY: caller promises start and end were derived from iter_to_raw which is in turn backed
+    // by a valid slice
+    unsafe { slice::from_raw_parts(start.as_ptr(), end.offset_from(start) as usize) }.iter()
 }
 
 impl<'slice> Utf8CharIter<'slice> {
@@ -28,38 +49,48 @@ impl<'slice> Utf8CharIter<'slice> {
     ///
     /// # Safety
     /// There must be at least `n` bytes available in the backing iterator
-    const unsafe fn fill_buf(&mut self, buf: &mut [u8; 4], n: EncodedLength) {
+    unsafe fn fill_buf(&mut self, buf: &mut [u8; 4], n: EncodedLength) {
+        let (mut start, end, lt) = iter_to_raw(&self.inner);
+
         // SAFETY: caller has ensured backing iterator has enough bytes to fill the requested
         // amount of 1..=4 and advance the iterator by the same amount
         //
         // this is a very idiomatic way to copy these bytes, its possibly not very efficient but it
         // is trivially correct
         unsafe {
-            ptr::copy_nonoverlapping(self.ptr.as_ptr(), buf.as_mut_ptr(), n as usize);
-            self.ptr = self.ptr.add(n as usize);
+            ptr::copy_nonoverlapping(start.as_ptr(), buf.as_mut_ptr(), n as usize);
+            start = start.add(n as usize);
         }
+
+        // SAFETY: start/end/lt were derived from iter_to_raw, start has been modified but did not
+        // escape the provenance range (the caller ensures this by stating at least 1..=4 bytes can
+        // be read)
+        self.inner = unsafe { raw_to_iter(start, end, lt) };
+    }
+
+    /// Peeks the next byte in the backing iterator without advancing
+    ///
+    /// # Safety
+    /// The backing iterator must have at least one extra byte available for reading
+    unsafe fn peek_unchecked(&self) -> u8 {
+        let (read, _, _) = iter_to_raw(&self.inner);
+
+        // SAFETY: Caller has asserted there is at least one byte left to be read
+        unsafe { read.read() }
     }
 
     /// Constructs a new `Utf8CharIter` from a string slice, borrowing the slice
     fn new(s: &'slice str) -> Self {
-        // casting NonNull<[u8]> to NonNull<u8> to act as start pointer
-        let ptr = NonNull::from(s.as_bytes()).cast::<u8>();
-
-        // SAFETY: It is always sound to add the length of an allocation to
-        // its start pointer, see ptr::add docs for clarification
-        let end = unsafe { ptr.add(s.len()) };
-
-        // lexically express captured lifetime
-        let lifetime = PhantomData::<&'slice str>;
-
-        Self { ptr, end, lifetime }
+        Self {
+            inner: s.as_bytes().iter(),
+        }
     }
 
     /// # Safety
     /// There must be at least one more codepoint in the backing utf8 slice
-    const unsafe fn next_unchecked(&mut self) -> Utf8Char {
-        // SAFETY: caller ensures pseudo-slice is not empty; we have provenance over the byte behind ptr
-        let first = unsafe { self.ptr.read() };
+    unsafe fn next_unchecked(&mut self) -> Utf8Char {
+        // SAFETY: caller ensures pseudo-slice is not empty; we have a byte available to read
+        let first = unsafe { self.peek_unchecked() };
 
         // SAFETY: first is the first byte of a potentially multibyte utf8 encoded character
         let len = unsafe { Utf8FirstByte::new(first).codepoint_len() };
@@ -86,19 +117,14 @@ impl<'slice> Utf8CharIter<'slice> {
     }
 
     fn is_empty(&self) -> bool {
-        self.ptr == self.end
+        self.inner.as_slice().is_empty()
     }
 
     fn as_str(&self) -> &'slice str {
-        // SAFETY: self.ptr and self.end are derived from a backing string slice, this is a valid
-        // and documented reconstruction method in offset_from docs
-        let len = unsafe { self.end.offset_from(self.ptr) as usize };
+        let slice = self.inner.as_slice();
 
-        // SAFETY: self.ptr is always aligned to a utf8 boundary and originally came from a string
-        // slice, so this is a valid string
-        unsafe {
-            core::str::from_utf8_unchecked(core::slice::from_raw_parts(self.ptr.as_ptr(), len))
-        }
+        // SAFETY: iterator is always aligned to a utf8 boundary and originally came from a string
+        unsafe { core::str::from_utf8_unchecked(slice) }
     }
 }
 
