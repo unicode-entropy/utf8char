@@ -48,13 +48,13 @@ pub fn bench(c: &mut Criterion) {
             })
         })
     });
-    c.bench_function("chars_encode-unicode", |c| {
-        c.iter(|| {
-            large.utf8chars().for_each(|c| {
-                bb(c);
-            })
-        })
-    });
+    //c.bench_function("chars_encode-unicode", |c| {
+    //    c.iter(|| {
+    //        large.utf8chars().for_each(|c| {
+    //            bb(c);
+    //        })
+    //    })
+    //});
     c.bench_function("chars_utf8char", |c| {
         c.iter(|| {
             Utf8CharIter::new(&large).for_each(|c| {
