@@ -153,7 +153,6 @@ impl Utf8CharInner {
     /// This includes "paired mutations", where one mutation sets an invalid state and a later
     /// mutation brings it back to validity: that is UB. Prefer to do mutations to an array copy
     /// and store once in such cases.
-    #[expect(dead_code, reason = "we may want this one day")]
     pub(crate) const unsafe fn total_repr_mut(&mut self) -> &mut [u8; 4] {
         // SAFETY: this type is repr(C) and is a subset of [u8; 4]
         // the caller agrees to not ever store an invalid repr

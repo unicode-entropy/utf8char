@@ -1,11 +1,15 @@
 //! Implements an Iterator on strings that provide Utf8Char's
 
 use core::{
+    iter::FusedIterator,
     marker::PhantomData,
     ptr::{self, NonNull},
 };
 
-use crate::{representation::{EncodedLength, Utf8FirstByte}, Utf8Char};
+use crate::{
+    representation::{EncodedLength, Utf8FirstByte},
+    Utf8Char,
+};
 
 /// An iterator over a string that yields `Utf8Char`'s
 // modeled after slice::Iter
@@ -19,14 +23,12 @@ pub struct Utf8CharIter<'slice> {
     lifetime: PhantomData<&'slice str>,
 }
 
-
-
 impl<'slice> Utf8CharIter<'slice> {
     /// Fills a buffer with 1..=4 bytes from the backing slice, advancing the iterator
     ///
     /// # Safety
     /// There must be at least `n` bytes available in the backing iterator
-    unsafe fn fill_buf(&mut self, buf: &mut [u8; 4], n: EncodedLength) {
+    const unsafe fn fill_buf(&mut self, buf: &mut [u8; 4], n: EncodedLength) {
         // SAFETY: caller has ensured backing iterator has enough bytes to fill the requested
         // amount of 1..=4 and advance the iterator by the same amount
         //
@@ -43,7 +45,7 @@ impl<'slice> Utf8CharIter<'slice> {
         // casting NonNull<[u8]> to NonNull<u8> to act as start pointer
         let ptr = NonNull::from(s.as_bytes()).cast::<u8>();
 
-        // SAFETY: It is always sound to add the length of an allocation to 
+        // SAFETY: It is always sound to add the length of an allocation to
         // its start pointer, see ptr::add docs for clarification
         let end = unsafe { ptr.add(s.len()) };
 
@@ -55,7 +57,7 @@ impl<'slice> Utf8CharIter<'slice> {
 
     /// # Safety
     /// There must be at least one more codepoint in the backing utf8 slice
-    unsafe fn next_unchecked(&mut self) -> Utf8Char {
+    const unsafe fn next_unchecked(&mut self) -> Utf8Char {
         // SAFETY: caller ensures pseudo-slice is not empty; we have provenance over the byte behind ptr
         let first = unsafe { self.ptr.read() };
 
@@ -82,4 +84,42 @@ impl<'slice> Utf8CharIter<'slice> {
 
         ch
     }
+
+    fn is_empty(&self) -> bool {
+        self.ptr == self.end
+    }
+
+    fn as_str(&self) -> &'slice str {
+        // SAFETY: self.ptr and self.end are derived from a backing string slice, this is a valid
+        // and documented reconstruction method in offset_from docs
+        let len = unsafe { self.end.offset_from(self.ptr) as usize };
+
+        // SAFETY: self.ptr is always aligned to a utf8 boundary and originally came from a string
+        // slice, so this is a valid string
+        unsafe {
+            core::str::from_utf8_unchecked(core::slice::from_raw_parts(self.ptr.as_ptr(), len))
+        }
+    }
 }
+
+impl Iterator for Utf8CharIter<'_> {
+    type Item = Utf8Char;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.is_empty() {
+            None
+        } else {
+            // SAFETY: we have checked that the backing array is not empty
+            Some(unsafe { self.next_unchecked() })
+        }
+    }
+
+    fn count(self) -> usize
+    where
+        Self: Sized,
+    {
+        self.as_str().chars().count()
+    }
+}
+
+impl FusedIterator for Utf8CharIter<'_> {}
