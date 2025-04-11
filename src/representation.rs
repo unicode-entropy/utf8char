@@ -1,5 +1,7 @@
 //! Internal representation of `Utf8Char`
 
+mod enums;
+
 use core::{mem, num::NonZeroU8, ptr};
 
 /// An implementation of codepoint_len that depends on bmi/tzcnt to be fast
@@ -100,7 +102,8 @@ impl Utf8CharInner {
     /// 2 bytes: [utf8; 2], `[TAG_CONTINUATION; 2]`
     /// 3 bytes: [utf8; 3], `TAG_CONTINUATION`
     /// 4 bytes: [utf8; 4]
-    /// byte 1 nicherepr: `(u8 is ..0xFF)` (`NonMaxU8`)
+    /// byte 1 nicherepr: `(u8 is ..0b1111_1000)` (`NonMaxU8`) (less than 0b1111_1000 as that is an
+    /// illegally high utf8firstbyte)
     /// byte 2..=4 nicherepr: `(u8 is TAG_CONTINUATION..=0b10_11_1111)`
     pub(crate) const unsafe fn from_utf8char_array(arr: [u8; 4]) -> Self {
         // TODO(ultrabear): debug_assume representation guarantees
