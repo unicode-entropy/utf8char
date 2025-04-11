@@ -41,23 +41,23 @@ pub fn bench(c: &mut Criterion) {
     //    c.iter(|| bb(codepoint_len_bmi(utf8char.as_bytes()[0])))
     //});
 
-    c.bench_function("chars_std", |c| {
+    c.bench_function("chars_std-rev", |c| {
         c.iter(|| {
-            large.chars().for_each(|c| {
+            large.chars().rev().for_each(|c| {
                 bb(c);
             })
         })
     });
-    //c.bench_function("chars_encode-unicode", |c| {
-    //    c.iter(|| {
-    //        large.utf8chars().for_each(|c| {
-    //            bb(c);
-    //        })
-    //    })
-    //});
-    c.bench_function("chars_utf8char", |c| {
+    c.bench_function("chars_encode-unicode-rev", |c| {
         c.iter(|| {
-            Utf8CharIter::new(&large).for_each(|c| {
+            large.utf8chars().rev().for_each(|c| {
+                bb(c);
+            })
+        })
+    });
+    c.bench_function("chars_utf8char-rev", |c| {
+        c.iter(|| {
+            Utf8CharIter::new(&large).rev().for_each(|c| {
                 bb(c);
             })
         })
