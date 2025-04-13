@@ -255,7 +255,7 @@ fn roundtrip() {
 
         let utf8 = Utf8Char::from_char(ch);
 
-        let codelen = Utf8Char::codepoint_len(utf8.0.first_byte().0);
+        let codelen = Utf8Char::codepoint_len(utf8.0.first_byte().0 as u8);
 
         assert!(matches!(codelen, 1..=4));
 

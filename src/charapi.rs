@@ -47,7 +47,7 @@ impl Utf8Char {
     /// Returns first byte of utf8char, more compact than writing `self.0.first_byte().0`
     #[must_use]
     const fn ascii(self) -> u8 {
-        self.0.first_byte().0
+        self.0.first_byte().0 as u8
     }
 
     /// Const compatible equality method
@@ -93,7 +93,7 @@ impl Utf8Char {
             // valid ascii value (len: 1)
             let ascii = unsafe { self.0.first_byte_mut() };
 
-            ascii.0 += b'a' - b'A';
+            *ascii += b'a' - b'A';
         }
 
         self
@@ -106,7 +106,7 @@ impl Utf8Char {
             // valid ascii value (len: 1)
             let ascii = unsafe { self.0.first_byte_mut() };
 
-            ascii.0 -= b'a' - b'A';
+            *ascii -= b'a' - b'A';
         }
 
         self

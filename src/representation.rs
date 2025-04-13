@@ -2,7 +2,7 @@
 
 mod enums;
 
-use core::{mem, num::NonZeroU8, ptr};
+use core::{mem, ptr};
 
 /// An implementation of codepoint_len that depends on bmi/tzcnt to be fast
 pub(crate) const fn codepoint_len_bmi(byte: u8) -> u8 {
@@ -38,8 +38,8 @@ fn identical_codepoint_len() {
 
         let control = c.len_utf8() as u8;
 
-        assert_eq!(codepoint_len_bmi(first), control);
-        assert_eq!(codepoint_len_lut(first), control);
+        assert_eq!(codepoint_len_bmi(first as u8), control);
+        assert_eq!(codepoint_len_lut(first as u8), control);
         assert_eq!(u8c.len_utf8(), control);
     });
 }
@@ -57,11 +57,22 @@ pub(crate) enum EncodedLength {
     Four,
 }
 
+/// Transmutes a mut reference from T to U
+///
+/// # Safety
+/// Requires the same safety assertions that core::mem::transmute does, as this is a safety
+/// wrapper around core::mem::transmute (for `&mut T` to `&mut U`, instead of the traditional T to
+/// U)
+const unsafe fn trans_mut<'a, T, U>(v: &'a mut T) -> &'a mut U {
+    // SAFETY: Caller is abiding by transmute contract when calling this function
+    unsafe { core::mem::transmute(v) }
+}
+
 /// The first and potentially only byte of a utf8 encoded codepoint
-// Safety invariant: `u8 is 0..0xff` & `u8 is only a firstbyte of a utf8 codepoint`
+// Safety invariant: matches only valid utf8 first byte encodings (documented in representation/enums.rs)
 #[repr(transparent)]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
-pub(crate) struct Utf8FirstByte(pub(crate) u8);
+pub(crate) struct Utf8FirstByte(pub(crate) enums::Utf8FirstByte);
 
 impl Utf8FirstByte {
     /// Constructs a new Utf8CharFirstByte from an arbitrary u8
@@ -69,11 +80,12 @@ impl Utf8FirstByte {
     /// # Safety
     /// value passed must be a valid utf8 encoded characters first byte
     pub(crate) const unsafe fn new(b: u8) -> Self {
-        Self(b)
+        // SAFETY: Caller asserts that byte is in the valid utf8 encoded characters firstbyte range
+        Self(unsafe { mem::transmute(b) })
     }
 
     pub(crate) const fn codepoint_len(self) -> EncodedLength {
-        let len: u8 = codepoint_len_lut(self.0);
+        let len: u8 = codepoint_len_lut(self.0 as u8);
 
         // SAFETY: Utf8CharEncodedLength is repr(u8), Utf8Char::codepoint_len will return 1..=4 for
         // any valid utf8 codepoint first byte, which this type stores as a safety invariant
@@ -83,9 +95,9 @@ impl Utf8FirstByte {
 
 #[repr(C)]
 // NOTE: Eq/Ord rely on the representation guarantee that padding bytes are set to `TAG_CONTINUATION`
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Copy, Clone, Eq, PartialEq)]
 /// Internal representation of a `Utf8Char` with an unsafe API
-pub(crate) struct Utf8CharInner(Utf8FirstByte, [NonZeroU8; 3]);
+pub(crate) struct Utf8CharInner(Utf8FirstByte, [enums::Utf8ContByte; 3]);
 
 impl Utf8CharInner {
     pub(crate) const fn len_utf8(self) -> EncodedLength {
@@ -102,8 +114,7 @@ impl Utf8CharInner {
     /// 2 bytes: [utf8; 2], `[TAG_CONTINUATION; 2]`
     /// 3 bytes: [utf8; 3], `TAG_CONTINUATION`
     /// 4 bytes: [utf8; 4]
-    /// byte 1 nicherepr: `(u8 is ..0b1111_1000)` (`NonMaxU8`) (less than 0b1111_1000 as that is an
-    /// illegally high utf8firstbyte)
+    /// byte 1 nicherepr: `(u8 is ..0b1111_1000)` (`NonMaxU8`) AND NOT `0b1000_0000..=0b1100_0001`
     /// byte 2..=4 nicherepr: `(u8 is TAG_CONTINUATION..=0b10_11_1111)`
     pub(crate) const unsafe fn from_utf8char_array(arr: [u8; 4]) -> Self {
         // TODO(ultrabear): debug_assume representation guarantees
@@ -148,8 +159,10 @@ impl Utf8CharInner {
     ///   len: 1)
     ///
     /// If you want to change the entire `Utf8CharInner`, use [`total_repr_mut`][Self::total_repr_mut]
-    pub(crate) const unsafe fn first_byte_mut(&mut self) -> &mut Utf8FirstByte {
-        &mut self.0
+    pub(crate) const unsafe fn first_byte_mut(&mut self) -> &mut u8 {
+        // SAFETY: Utf8FirstByte is repr(u8), caller promises to abide by contract which includes
+        // staying within valid states
+        unsafe { trans_mut::<enums::Utf8FirstByte, u8>(&mut self.0 .0) }
     }
 
     /// Returns mutable array reference to entire `Utf8CharInner` repr as a `&mut [u8; 4]`
@@ -163,5 +176,19 @@ impl Utf8CharInner {
         // SAFETY: this type is repr(C) and is a subset of [u8; 4]
         // the caller agrees to not ever store an invalid repr
         unsafe { &mut *ptr::from_mut(self).cast::<[u8; 4]>() }
+    }
+}
+
+// we need to implement these manually because the optimizer started giving up on the enum
+// representation
+impl Ord for Utf8CharInner {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+        self.as_array().cmp(other.as_array())
+    }
+}
+
+impl PartialOrd for Utf8CharInner {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        Some(self.cmp(other))
     }
 }
