@@ -50,6 +50,8 @@ fn identical_codepoint_len() {
     dead_code,
     reason = "we transmute into/outof these values, rust cant see it"
 )]
+#[expect(clippy::missing_docs_in_private_items, reason = "its 1..=4, each variant is unspecial")]
+/// An enum representing all of the valid lengths of a utf8 encoded codepoint
 pub(crate) enum EncodedLength {
     One = 1,
     Two,
@@ -60,9 +62,10 @@ pub(crate) enum EncodedLength {
 /// Transmutes a mut reference from T to U
 ///
 /// # Safety
-/// Requires the same safety assertions that core::mem::transmute does, as this is a safety
-/// wrapper around core::mem::transmute (for `&mut T` to `&mut U`, instead of the traditional T to
+/// Requires the same safety assertions that `core::mem::transmute` does, as this is a safety
+/// wrapper around `core::mem::transmute` (for `&mut T` to `&mut U`, instead of the traditional T to
 /// U)
+#[expect(clippy::needless_lifetimes, reason = "This is an unsafe code wrapper, the explicitness is its purpose")]
 const unsafe fn trans_mut<'a, T, U>(v: &'a mut T) -> &'a mut U {
     // SAFETY: Caller is abiding by transmute contract when calling this function
     unsafe { core::mem::transmute(v) }
@@ -75,21 +78,22 @@ const unsafe fn trans_mut<'a, T, U>(v: &'a mut T) -> &'a mut U {
 pub(crate) struct Utf8FirstByte(pub(crate) enums::Utf8FirstByte);
 
 impl Utf8FirstByte {
-    /// Constructs a new Utf8CharFirstByte from an arbitrary u8
+    /// Constructs a new `Utf8FirstByte` from an arbitrary u8
     ///
     /// # Safety
     /// value passed must be a valid utf8 encoded characters first byte
     pub(crate) const unsafe fn new(b: u8) -> Self {
         // SAFETY: Caller asserts that byte is in the valid utf8 encoded characters firstbyte range
-        Self(unsafe { mem::transmute(b) })
+        Self(unsafe { mem::transmute::<u8, enums::Utf8FirstByte>(b) })
     }
 
+    /// Returns the total length of the encoded character that this `Utf8FirstByte` indicates
     pub(crate) const fn codepoint_len(self) -> EncodedLength {
         let len: u8 = codepoint_len_lut(self.0 as u8);
 
         // SAFETY: Utf8CharEncodedLength is repr(u8), Utf8Char::codepoint_len will return 1..=4 for
         // any valid utf8 codepoint first byte, which this type stores as a safety invariant
-        unsafe { mem::transmute(len) }
+        unsafe { mem::transmute::<u8, EncodedLength>(len) }
     }
 }
 
@@ -100,6 +104,7 @@ impl Utf8FirstByte {
 pub(crate) struct Utf8CharInner(Utf8FirstByte, [enums::Utf8ContByte; 3]);
 
 impl Utf8CharInner {
+    /// Returns the length of the char as encoded in utf8
     pub(crate) const fn len_utf8(self) -> EncodedLength {
         self.0.codepoint_len()
     }
