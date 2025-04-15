@@ -1,4 +1,4 @@
-//! Enums that are used by the internal representation of Utf8Char
+//! Enums that are used by the internal representation of `Utf8Char`
 
 /// Enum representing every valid state of the first byte of a utf8 encoded codepoint
 #[repr(u8)]

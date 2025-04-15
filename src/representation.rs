@@ -4,12 +4,13 @@ mod enums;
 
 use core::{mem, ptr};
 
-/// An implementation of codepoint_len that depends on bmi/tzcnt to be fast
+/// An implementation of `codepoint_len` that depends on bmi/tzcnt to be fast
+#[expect(clippy::cast_possible_truncation, reason = "leading_ones is weird, the max value is 8, no truncation")]
 pub(crate) const fn codepoint_len_bmi(byte: u8) -> u8 {
     (byte.leading_ones().saturating_sub(1) + 1) as u8
 }
 
-/// An implementation of codepoint_len that should be fast on all architectures
+/// An implementation of `codepoint_len` that should be fast on all architectures
 pub(crate) const fn codepoint_len_lut(byte: u8) -> u8 {
     const LUT_SIZE: usize = 16;
 
@@ -18,7 +19,13 @@ pub(crate) const fn codepoint_len_lut(byte: u8) -> u8 {
         let mut i = 0;
         let mut arr = [0; LUT_SIZE];
         while i < LUT_SIZE {
-            arr[i] = codepoint_len_bmi((i as u8) << 4);
+            #[expect(
+                clippy::cast_possible_truncation,
+                reason = "wont truncate, const contexts cant use try_from"
+            )]
+            {
+                arr[i] = codepoint_len_bmi((i as u8) << 4);
+            }
             i += 1;
         }
         arr
@@ -50,7 +57,10 @@ fn identical_codepoint_len() {
     dead_code,
     reason = "we transmute into/outof these values, rust cant see it"
 )]
-#[expect(clippy::missing_docs_in_private_items, reason = "its 1..=4, each variant is unspecial")]
+#[expect(
+    clippy::missing_docs_in_private_items,
+    reason = "its 1..=4, each variant is unspecial"
+)]
 /// An enum representing all of the valid lengths of a utf8 encoded codepoint
 pub(crate) enum EncodedLength {
     One = 1,
@@ -65,7 +75,10 @@ pub(crate) enum EncodedLength {
 /// Requires the same safety assertions that `core::mem::transmute` does, as this is a safety
 /// wrapper around `core::mem::transmute` (for `&mut T` to `&mut U`, instead of the traditional T to
 /// U)
-#[expect(clippy::needless_lifetimes, reason = "This is an unsafe code wrapper, the explicitness is its purpose")]
+#[expect(
+    clippy::needless_lifetimes,
+    reason = "This is an unsafe code wrapper, the explicitness is its purpose"
+)]
 const unsafe fn trans_mut<'a, T, U>(v: &'a mut T) -> &'a mut U {
     // SAFETY: Caller is abiding by transmute contract when calling this function
     unsafe { core::mem::transmute(v) }

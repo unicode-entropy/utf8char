@@ -1,4 +1,4 @@
-//! Implements an Iterator on strings that provide Utf8Char's
+//! Implements an Iterator on strings that provide `Utf8Char`'s
 
 use core::{fmt, iter::FusedIterator, slice};
 
@@ -47,6 +47,7 @@ impl<'slice> Utf8CharIter<'slice> {
     }
 
     /// Constructs a new `Utf8CharIter` from a string slice, borrowing the slice
+    #[must_use]
     pub fn new(s: &'slice str) -> Self {
         Self {
             inner: s.as_bytes().iter(),
@@ -97,7 +98,7 @@ impl<'slice> Utf8CharIter<'slice> {
         ch
     }
 
-    /// Returns the next Utf8Char from the back of the backing slice
+    /// Returns the next `Utf8Char` from the back of the backing slice
     ///
     /// # Safety
     /// There must be at least one char available in the backing slice
@@ -135,11 +136,15 @@ impl<'slice> Utf8CharIter<'slice> {
         Utf8Char(unsafe { Utf8CharInner::from_utf8char_array(bits.to_be_bytes()) })
     }
 
+    /// Returns whether the iterator is empty without advancing it
+    #[must_use]
     fn is_empty(&self) -> bool {
         self.inner.as_slice().is_empty()
     }
 
-    fn as_str(&self) -> &'slice str {
+    /// Returns what is left in the iterator as a string
+    #[must_use]
+    pub fn as_str(&self) -> &'slice str {
         let slice = self.inner.as_slice();
 
         // SAFETY: iterator is always aligned to a utf8 boundary and originally came from a string
@@ -190,15 +195,15 @@ impl DoubleEndedIterator for Utf8CharIter<'_> {
 
 impl FusedIterator for Utf8CharIter<'_> {}
 
-/// A convenience trait to make able the ability to call .utf8_chars() on a string just like
-/// .chars()
+/// A convenience trait to make able the ability to call `.utf8_chars()` on a string just like
+/// `.chars()`
 pub trait IntoUtf8Chars {
-    /// Returns a Utf8CharIter over the string
-    fn utf8_chars<'s>(&'s self) -> Utf8CharIter<'s>;
+    /// Returns a `Utf8CharIter` over the string
+    fn utf8_chars(&self) -> Utf8CharIter;
 }
 
 impl IntoUtf8Chars for str {
-    fn utf8_chars<'s>(&'s self) -> Utf8CharIter<'s> {
+    fn utf8_chars(&self) -> Utf8CharIter {
         Utf8CharIter::new(self)
     }
 }
