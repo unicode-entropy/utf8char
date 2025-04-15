@@ -4,7 +4,7 @@
 use super::Utf8Char;
 
 /// Continuation byte tag
-pub(crate) const TAG_CONTINUATION: u8 = 0b10_00_0000;
+pub(crate) const TAG_CONTINUATION: u8 = 0b1000_0000;
 
 /// Const modified copy of `str::chars().next().unwrap_unchecked()`
 /// see inner comments for details
@@ -50,11 +50,11 @@ pub(crate) const fn to_char(code: Utf8Char) -> char {
 
         let y_z = utf8_acc_cont_byte((y & B6) as u32, z);
 
-        ch = init << 12 | y_z;
+        ch = (init << 12) | y_z;
 
         if x >= 0xF0 {
             let w = arr[3];
-            ch = (init & 7) << 18 | utf8_acc_cont_byte(y_z, w);
+            ch = ((init & 7) << 18) | utf8_acc_cont_byte(y_z, w);
         }
     }
 
