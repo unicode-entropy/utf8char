@@ -117,8 +117,6 @@ impl Utf8CharInner {
     /// byte 1 nicherepr: `(u8 is ..0b1111_1000)` (`NonMaxU8`) AND NOT `0b1000_0000..=0b1100_0001`
     /// byte 2..=4 nicherepr: `(u8 is TAG_CONTINUATION..=0b10_11_1111)`
     pub(crate) const unsafe fn from_utf8char_array(arr: [u8; 4]) -> Self {
-        // TODO(ultrabear): debug_assume representation guarantees
-
         // SAFETY: the caller has abided by the safety contract, which is a strict subset of the
         // data allowed in this representation, we are also repr(C) so the layout is the same
         unsafe { mem::transmute(arr) }

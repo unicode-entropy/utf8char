@@ -1,6 +1,6 @@
 //! Implements an Iterator on strings that provide Utf8Char's
 
-use core::{iter::FusedIterator, slice};
+use core::{fmt, iter::FusedIterator, slice};
 
 use crate::{representation::Utf8FirstByte, Utf8Char, Utf8CharInner, TAG_CONTINUATION};
 
@@ -12,11 +12,19 @@ fn is_continuation(b: u8) -> bool {
 }
 
 /// An iterator over a string that yields `Utf8Char`'s
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Utf8CharIter<'slice> {
     /// benchmarked, just using this and its normal api is the fastest way already
     /// dont bother writing some manual pointer magic to try and beat it... dont ask
     inner: slice::Iter<'slice, u8>,
+}
+
+impl fmt::Debug for Utf8CharIter<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Utf8CharIter(")?;
+        f.debug_list().entries(self.clone()).finish()?;
+        write!(f, ")")
+    }
 }
 
 impl<'slice> Utf8CharIter<'slice> {
@@ -119,7 +127,8 @@ impl<'slice> Utf8CharIter<'slice> {
         bits <<= unsafe { 4usize.unchecked_sub(len).unchecked_mul(8) };
 
         // apply TAG_CONTINUATION or'ng to make valid utf8charinner representation
-        bits |= const { u32::from_be_bytes([0, TAG_CONTINUATION, TAG_CONTINUATION, TAG_CONTINUATION]) };
+        bits |=
+            const { u32::from_be_bytes([0, TAG_CONTINUATION, TAG_CONTINUATION, TAG_CONTINUATION]) };
 
         // SAFETY: bits matches representation of utf8charinner with padding bytes and all other bytes
         // being part of a single utf8 encoded character
@@ -181,11 +190,29 @@ impl DoubleEndedIterator for Utf8CharIter<'_> {
 
 impl FusedIterator for Utf8CharIter<'_> {}
 
+/// A convenience trait to make able the ability to call .utf8_chars() on a string just like
+/// .chars()
+pub trait IntoUtf8Chars {
+    /// Returns a Utf8CharIter over the string
+    fn utf8_chars<'s>(&'s self) -> Utf8CharIter<'s>;
+}
+
+impl IntoUtf8Chars for str {
+    fn utf8_chars<'s>(&'s self) -> Utf8CharIter<'s> {
+        Utf8CharIter::new(self)
+    }
+}
+
 #[test]
 fn allstring() {
     use itertools::Itertools;
 
+    #[cfg(not(miri))]
     let allchars = (char::MIN..=char::MAX).collect::<alloc::string::String>();
+    #[cfg(miri)]
+    let allchars = (char::MIN..=char::MAX)
+        .take(10_000)
+        .collect::<alloc::string::String>();
 
     let utf8chars = Utf8CharIter::new(&allchars);
 
@@ -203,14 +230,10 @@ fn allstring() {
             assert_eq!(Utf8Char::from_char(u8c.to_char()), u8c);
         });
 
-    utf8chars
-        .rev()
-        .zip_eq(chars.rev())
-        .for_each(|(u8c, c)|  { 
-            assert_eq!(u8c.to_char(), c); 
+    utf8chars.rev().zip_eq(chars.rev()).for_each(|(u8c, c)| {
+        assert_eq!(u8c.to_char(), c);
 
-            // ensures bitrepr compatibility is upheld
-            assert_eq!(Utf8Char::from_char(u8c.to_char()), u8c);
-
-        });
+        // ensures bitrepr compatibility is upheld
+        assert_eq!(Utf8Char::from_char(u8c.to_char()), u8c);
+    });
 }
