@@ -31,6 +31,9 @@ mod std_at_home;
 #[cfg(test)]
 mod tests;
 
+pub use iter::{Utf8CharIter, IntoUtf8Chars};
+
+
 /// A single unicode codepoint encoded in utf8.
 ///
 /// This type is like a contemporary [`prim@char`]:
