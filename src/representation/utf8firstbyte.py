@@ -10,6 +10,13 @@ filters: list[tuple[Callable[[int], bool], str]] = [
 ]
 
 
+# appeases clippy by separating binary literals for clarity
+def split(n: int) -> str:
+    a = f"{n:b}"
+
+    return f"{a[:4]}_{a[4:]}"
+
+
 def main():
     for i in range(128, 256):
         valid = True
@@ -18,12 +25,12 @@ def main():
             matches, err = f
 
             if matches(i):
-                print(f"    // SKIP: _{i} = 0b{i:b}, {err}")
+                print(f"    // SKIP: _{i} = 0b{split(i)}, {err}")
                 valid = False
                 break
 
         if valid:
-            print(f"    _{i} = 0b{i:b}, // {i:x}")
+            print(f"    _{i} = 0b{split(i)}, // {i:x}")
 
 
 if __name__ == "__main__":
