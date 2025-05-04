@@ -273,7 +273,7 @@ fn roundtrip() {
 
         assert_eq!(utf8.to_char(), ch);
         assert_eq!(utf8_alt.to_char(), ch);
-    })
+    });
 }
 
 #[test]
@@ -299,9 +299,9 @@ fn displays() {
         assert_eq!(bufutf8, bufutf32);
         assert_eq!(bufutf8, utf8.as_str());
 
-        assert_eq!(Utf8Char::from_first_char(&bufutf8), Some(utf8));
+        assert_eq!(Utf8Char::from_first_char(bufutf8), Some(utf8));
         assert_eq!(
-            unsafe { Utf8Char::from_first_char_unchecked(&bufutf8) },
+            unsafe { Utf8Char::from_first_char_unchecked(bufutf8) },
             utf8
         );
 
